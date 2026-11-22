@@ -1,0 +1,8 @@
+# build outputs (they go into the release zip, not the repository)
+*.o
+*.elf
+*.bin
+*.iso
+disk.img
+disk.img.gz
+iso/
