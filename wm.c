@@ -97,6 +97,7 @@ static void focus(int app) {
 }
 
 static void open_app(int app) {
+    desk_focus = 0;
     if (find(app)) { focus(app); return; }
     wins[app] = (struct window){ app, app_x[app], app_y[app], app_w[app], app_h[app], 0, 0, 0, 0, 0, 0, 0 };
     zorder[nwin++] = app;
@@ -226,11 +227,7 @@ static void desk_refresh(void) {
     desk_n = k;
 }
 static int nicons(void) { desk_refresh(); return NICONS + desk_n; }
-static void icon_rect(int i, int *x, int *y) {
-    if (i < NICONS) { *x = 16; *y = 10 + i * 88; return; }
-    int d = i - NICONS;
-    *x = gfx_w - 88 - (d / DESK_ROWS) * 96; *y = 10 + (d % DESK_ROWS) * 88;   /* in columns from the right edge */
-}
+static void icon_rect(int i, int *x, int *y);                  /* see "desktop layout" */
 static void desk_path(int i, char *out) { path_resolve(DESK_DIR, desk_list[i - NICONS].name, out); }
 
 /* ---------- wallpaper (rendered once, then reused) ---------- */
@@ -398,7 +395,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.3", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 2.4", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -438,7 +435,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.3  -  Files on the desktop", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 2.4  -  Spider Solitaire, movable icons", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -1020,6 +1017,111 @@ static int read_small(const char *path, char *out, int max) {  /* a little text 
     out[n > 0 ? n : 0] = 0;
     return n > 0;
 }
+/* ---------- desktop layout ----------
+ * Icons sit on a grid of cells (96 x 88). Icons the user dragged somewhere keep that
+ * cell (saved in C:\$Desktop.ini as "key=col,row"); the rest fill the free cells:
+ * system icons down the left column, desktop files down the right-hand columns. */
+#define LAYOUT_FILE "/$Desktop.ini"
+#define LAY_MAX 80
+#define DESK_COLS ((gfx_w - 16) / 96)
+struct lay_entry { char key[FS_NAME_MAX]; int col, row; };
+static struct lay_entry lay[LAY_MAX];
+static int nlay, lay_loaded, lay_dirty = 1;
+static int icon_cell[NICONS + DESK_MAX];                      /* col * 16 + row */
+static uint32_t lay_gen = 0xFFFFFFFF;
+static void icon_key(int i, char *out) {                       /* what an icon is called in the layout file */
+    if (i >= NICONS) { kcpy(out, desk_list[i - NICONS].name, FS_NAME_MAX); return; }
+    out[0] = '@'; kcpy(out + 1, desk_icons[i] == DESK_BIN ? "Recycle Bin" : app_titles[desk_icons[i]], FS_NAME_MAX - 1);
+}
+static void lay_load(void) {
+    static char buf[6000];
+    lay_loaded = 1; nlay = 0;
+    if (!fs_mounted() || !read_small(LAYOUT_FILE, buf, sizeof buf)) return;
+    for (char *p = buf; *p && nlay < LAY_MAX; ) {
+        char *e = p; while (*e && *e != '\n') e++;
+        char *eq = e; while (eq > p && *eq != '=') eq--;
+        if (*eq == '=' && eq > p) {
+            struct lay_entry *l = &lay[nlay];
+            int k = 0; for (char *q = p; q < eq && k < FS_NAME_MAX - 1; q++) l->key[k++] = *q;
+            l->key[k] = 0;
+            int c = 0, r = 0; char *q = eq + 1;
+            while (*q >= '0' && *q <= '9') c = c * 10 + *q++ - '0';
+            if (*q == ',') { q++; while (*q >= '0' && *q <= '9') r = r * 10 + *q++ - '0'; }
+            l->col = c; l->row = r; nlay++;
+        }
+        p = *e ? e + 1 : e;
+    }
+    lay_dirty = 1;
+}
+static void lay_save(void) {
+    static char buf[6000]; char *p = buf;
+    for (int i = 0; i < nlay; i++) {
+        if (p - buf > (int)sizeof buf - FS_NAME_MAX - 16) break;
+        p = cat(p, lay[i].key); *p++ = '='; p = utoa(p, lay[i].col); *p++ = ','; p = utoa(p, lay[i].row); *p++ = '\n';
+    }
+    if (fs_mounted()) { if (nlay) fs_write(LAYOUT_FILE, buf, p - buf); else fs_delete(LAYOUT_FILE); }
+    lay_dirty = 1;
+}
+static int lay_find(const char *key) { for (int i = 0; i < nlay; i++) if (!kstrcmp(lay[i].key, key)) return i; return -1; }
+static void lay_set(const char *key, int col, int row) {
+    int i = lay_find(key);
+    if (i < 0) { if (nlay >= LAY_MAX) return; i = nlay++; kcpy(lay[i].key, key, FS_NAME_MAX); }
+    lay[i].col = col; lay[i].row = row;
+}
+static void desk_layout(void) {
+    if (!lay_loaded) lay_load();
+    desk_refresh();
+    if (!lay_dirty && lay_gen == fs_generation) return;
+    lay_gen = fs_generation; lay_dirty = 0;
+    int n = NICONS + desk_n, cols = DESK_COLS;
+    static unsigned char used[16][16];
+    for (int c = 0; c < 16; c++) for (int r = 0; r < 16; r++) used[c][r] = 0;
+    for (int i = 0; i < n; i++) {                              /* first the icons with a saved place */
+        char key[FS_NAME_MAX]; icon_key(i, key);
+        int k = lay_find(key);
+        icon_cell[i] = -1;
+        if (k >= 0 && lay[k].col < cols && lay[k].row < DESK_ROWS && !used[lay[k].col][lay[k].row]) {
+            icon_cell[i] = lay[k].col * 16 + lay[k].row; used[lay[k].col][lay[k].row] = 1;
+        }
+    }
+    for (int i = 0; i < n; i++) {                              /* then the rest, in the free cells */
+        if (icon_cell[i] >= 0) continue;
+        int found = 0;
+        for (int c0 = 0; c0 < cols && !found; c0++) {
+            int c = i < NICONS ? c0 : cols - 1 - c0;           /* system icons from the left, files from the right */
+            for (int r = 0; r < DESK_ROWS && !found; r++)
+                if (!used[c][r]) { used[c][r] = 1; icon_cell[i] = c * 16 + r; found = 1; }
+        }
+        if (!found) icon_cell[i] = 0;
+    }
+}
+static void icon_rect(int i, int *x, int *y) {
+    desk_layout();
+    int cell = icon_cell[i];
+    *x = 16 + (cell >> 4) * 96; *y = 10 + (cell & 15) * 88;
+}
+/* an icon was dropped on the desktop at the pointer: give it that cell (swap with whoever is there) */
+static void icon_move(int i, int px, int py) {
+    desk_layout();
+    int col = (px - 16) / 96, row = (py - 10) / 88;
+    if (col < 0) col = 0;
+    if (col >= DESK_COLS) col = DESK_COLS - 1;
+    if (row < 0) row = 0;
+    if (row >= DESK_ROWS) row = DESK_ROWS - 1;
+    int cell = col * 16 + row, old = icon_cell[i];
+    if (cell == old) return;
+    char key[FS_NAME_MAX];
+    for (int j = 0; j < NICONS + desk_n; j++) {                /* everyone else keeps their place */
+        icon_key(j, key);
+        if (j == i) continue;
+        if (icon_cell[j] == cell) lay_set(key, old >> 4, old & 15);   /* swap with the icon that was there */
+        else lay_set(key, icon_cell[j] >> 4, icon_cell[j] & 15);
+    }
+    icon_key(i, key); lay_set(key, col, row);
+    lay_save();
+}
+static void icons_auto_arrange(void) { nlay = 0; lay_save(); }
+
 static void ex_say(const char *a, const char *b);
 static int ex_is_sel(int i) { return i >= 0 && i < ex_n && (i == ex_sel || ex_mark[i]); }
 static int ex_nsel(void) { int n = 0; for (int i = 0; i < ex_n; i++) n += ex_is_sel(i); return n; }
@@ -2002,6 +2104,7 @@ void wm_proc_opened(int slot) {
     cascade++;
     wins[id] = (struct window){ id, x, y, PROC_CANVAS_W + 2, PROC_CANVAS_H + TITLE_H + 1, 0, 0, 0, 0, 0, 0, 0 };
     zorder[nwin++] = id;
+    desk_focus = 0;                                            /* a new window takes the keyboard */
     dirty = 1;
 }
 static int mcapture = -1;                       /* program window that owns the mouse while a button is held */
@@ -2508,12 +2611,12 @@ static void draw_window(int app, int is_focused) {
 
 /* ---------- taskbar & start menu ---------- */
 #define START_W 300
-#define START_ITEM_H 35
-static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)", "", "Restart", "Shut down" };
-static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4, -1, -2, -3 };
-static const char *start_programs[] = { "/Apps/paint.elf", "/Apps/snake.elf", "/Apps/mines.elf", "/Apps/music.elf", "/Apps/viewer.elf", "/Apps/web.elf", "/Apps/calc.elf", "/Apps/solitaire.elf", "/Apps/freecell.elf" };
-#define NSTART 19
-#define START_SEP 16
+#define START_ITEM_H 33
+static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Spider", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)", "", "Restart", "Shut down" };
+static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, -19, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4, -1, -2, -3 };
+static const char *start_programs[] = { "/Apps/paint.elf", "/Apps/snake.elf", "/Apps/mines.elf", "/Apps/music.elf", "/Apps/viewer.elf", "/Apps/web.elf", "/Apps/calc.elf", "/Apps/solitaire.elf", "/Apps/freecell.elf", "/Apps/spider.elf" };
+#define NSTART 20
+#define START_SEP 17
 static int start_h(void) { return 64 + NSTART * START_ITEM_H - 24; }
 static int start_item_y(int i) { int y0 = gfx_h - TASKBAR_H - start_h() + 64; return y0 + i * START_ITEM_H - (i > START_SEP ? 24 : 0); }
 
@@ -2726,9 +2829,11 @@ static void render(void) {
         char label[64], dest[FS_PATH_MAX], t[96];
         int kind = dd_target(label, dest);
         char nm[28];
-        if (dd_n == 1) kcpy(nm, base_name(dd_paths[0]), 28); else { char *q = utoa(nm, dd_n); cat(q, " items"); }
+        if (dd_n == 1) kcpy(nm, base_name(dd_paths[0]), 28);
+        else if (!dd_n) { char k[FS_NAME_MAX]; icon_key(dd_item, k); kcpy(nm, k + (k[0] == '@'), 28); }
+        else { char *q = utoa(nm, dd_n); cat(q, " items"); }
         char *q = cat(t, nm);
-        if (kind) { q = cat(q, "  ->  "); cat(q, label); }
+        if (kind && label[0]) { q = cat(q, "  ->  "); cat(q, label); }
         int tw = 8 * (int)kstrlen_(t) + 16;
         gfx_noclip();
         int gx = mx + 14, gy = my + 18;
@@ -2760,6 +2865,8 @@ static int dd_all_in(const char *dir) {                       /* is everything d
 }
 static int dd_target(char *label, char *dest) {
     int a = hit_window(mx, my);
+    label[0] = 0;
+    if (!dd_n && a >= 0) return 0;                             /* a system icon only moves on the desktop */
     if (a == APP_EXPLORER && !ex_in_bin) {
         int j = hover_key - 1200;
         int ctrl = kbd_ctrl_down();
@@ -2786,16 +2893,17 @@ static int dd_target(char *label, char *dest) {
     if (a == APP_NOTEPAD && dd_n == 1 && fs_stat(dd_paths[0], 0) == 1) { cat(label, "Open in Notepad"); return 4; }
     if (a >= 0 || my >= gfx_h - TASKBAR_H) return 0;
     int ctrl = kbd_ctrl_down(), i = hover_key - 300;
+    if (!dd_n) { if (i == dd_item || i < 0) { label[0] = 0; return 5; } return i >= 0 ? 5 : 0; }   /* system icon: a new place */
     if (i >= 0 && i < NICONS && desk_icons[i] == DESK_BIN) { cat(label, "Move to the Recycle Bin"); return 3; }
     if (i >= NICONS && i < nicons()) {                         /* a folder on the desktop */
-        if (!desk_list[i - NICONS].is_dir) return 0;
+        if (!desk_list[i - NICONS].is_dir || i == dd_item) return dd_desk && i != dd_item ? 5 : 0;   /* a file: swap places */
         desk_path(i, dest);
         for (int k = 0; k < dd_n; k++) if (!kstrcmp(dest, dd_paths[k])) return 0;
         char *q = cat(label, ctrl ? "Copy to " : "Move to "); kcpy(q, desk_list[i - NICONS].name, 24);
         return 1;
     }
-    if (i >= 0) return 0;
-    if (dd_all_in(DESK_DIR)) return 0;                         /* already on the desktop */
+    if (i >= 0) return dd_desk ? 5 : 0;                        /* onto another icon: swap places */
+    if (dd_all_in(DESK_DIR)) { label[0] = 0; return dd_desk ? 5 : 0; }   /* a desktop icon to a new place */
     kcpy(dest, DESK_DIR, FS_PATH_MAX); cat(label, ctrl ? "Copy to the desktop" : "Move to the desktop");
     return 1;
 }
@@ -2806,6 +2914,7 @@ static void dd_drop(void) {
     char name[FS_NAME_MAX]; kcpy(name, base_name(dd_paths[0]), FS_NAME_MAX);
     ex_status[0] = 0;
     if (kind == 4) { wm_open_file(dd_paths[0]); return; }
+    if (kind == 5) { icon_move(dd_item, mx, my); sel_icon = -1; return; }
     if (kind != 1 && kind != 3) return;
     int copy = kind == 1 && kbd_ctrl_down(), done = 0;
     const char *why = 0;
@@ -2839,7 +2948,7 @@ enum { M_OPEN = 1, M_NOTEPAD, M_CUT, M_COPY, M_PASTE_INTO, M_DELETE, M_RENAME, M
        M_DESK_OPEN, M_DESK_EMPTY, M_EXPLORER, M_TERMINAL, M_SETTINGS, M_TASKMGR, M_ABOUT,
        M_N_UNDO, M_N_CUT, M_N_COPY, M_N_PASTE, M_N_ALL, M_N_FIND, M_T_PASTE,
        M_D_OPEN, M_D_CUT, M_D_COPY, M_D_PASTEINTO, M_D_DELETE, M_D_RENAME, M_D_PROPS,
-       M_D_NEWFOLDER, M_D_NEWFILE, M_D_PASTE };
+       M_D_NEWFOLDER, M_D_NEWFILE, M_D_PASTE, M_D_ARRANGE };
 
 /* paste the clipboard into another folder; File Explorer stays where it was */
 static void paste_into(const char *folder) {
@@ -2955,6 +3064,7 @@ static void desktop_menu(void) {
     menu_add("Terminal", M_TERMINAL, 0);
     menu_add("Task Manager", M_TASKMGR, 0);
     menu_add("", 0, 0);
+    menu_add("Auto arrange icons", M_D_ARRANGE, !nlay);
     menu_add("Change wallpaper...", M_SETTINGS, 0);
     menu_add("About MyOS", M_ABOUT, 0);
     menu_show(mx, my);
@@ -3031,10 +3141,12 @@ static void menu_run(int id) {
     case M_D_NEWFOLDER: open_app(APP_EXPLORER); ex_go(DESK_DIR); ex_new(1); break;
     case M_D_NEWFILE: open_app(APP_EXPLORER); ex_go(DESK_DIR); ex_new(0); break;
     case M_D_PASTE: paste_into(DESK_DIR); break;
+    case M_D_ARRANGE: icons_auto_arrange(); break;
     }
 }
 /* the right mouse button went down */
 static void right_click(void) {
+    desk_focus = 0;                                            /* desktop_menu() sets it again */
     if (start_open) { start_open = 0; dirty = 1; }
     if (my >= gfx_h - TASKBAR_H) {
         if (hover_key >= 200 && hover_key < 300) window_menu(hover_key - 200, mx, gfx_h - TASKBAR_H);
@@ -3121,6 +3233,7 @@ static void do_power(int kind) {
 }
 
 static void left_click(void) {
+    desk_focus = 0;                                            /* set again below if the click is on the desktop */
     /* Start menu */
     if (start_open) {
         int h = hover_key;
@@ -3199,7 +3312,7 @@ static void left_click(void) {
                 break;
             }
             last_click_icon = i; last_click_tick = ticks;
-            if (i >= NICONS) { dd_desk = 1; dd_item = i; dd_px = mx; dd_py = my; }   /* may become a drag */
+            dd_desk = 1; dd_item = i; dd_px = mx; dd_py = my;    /* may become a drag */
         }
     }
     if (sel_icon != old || sel_icon < 0) dirty = 1;
@@ -3272,7 +3385,8 @@ void wm_mouse(int dx, int dy, int buttons) {
         if (ddx * ddx + ddy * ddy > 36) {
             dd_on = 1; ex_last_row = -1; ex_collapse = -1;
             dd_n = 0;                                          /* the whole selection goes, if the item is in it */
-            if (dd_desk) desk_path(dd_item, dd_paths[dd_n++]);
+            if (dd_desk && dd_item >= NICONS) desk_path(dd_item, dd_paths[dd_n++]);
+            else if (dd_desk) ;                                /* a system icon: it can only be moved around */
             else if (ex_is_sel(dd_item)) { for (int i = 0; i < ex_n && dd_n < EX_CLIPS; i++) if (ex_is_sel(i)) ex_child(i, dd_paths[dd_n++]); }
             else ex_child(dd_item, dd_paths[dd_n++]);
         }
@@ -3344,7 +3458,7 @@ void wm_key(int k) {
         if (nwin > 1) focus(zorder[0]);
         return;
     }
-    if (desk_focus) {                                          /* the desktop was clicked last */
+    if (desk_focus && k != KEY_START && k != KEY_ALTTAB && k != KEY_ALTF4) {   /* the desktop was clicked last */
         int i = sel_icon, file = i >= NICONS && i < nicons();
         if (k == KEY_CTRL('v')) { paste_into(DESK_DIR); dirty = 1; return; }
         if (file && (k == KEY_DEL)) { desk_delete(i); return; }

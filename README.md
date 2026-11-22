@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.3 (stage 23: files on the desktop). A 32-bit x86 operating system with a graphical
+Version 2.4 (stage 24: Spider Solitaire and movable desktop icons). A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -46,6 +46,10 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   it there (hold **Ctrl** to copy), onto the **Up** button to move it one folder up, onto
   the **Recycle Bin** icon on the desktop to delete it, or onto Notepad to open it there. A
   label next to the pointer says what will happen
+- **Movable desktop icons**: drag any desktop icon (This PC, Recycle Bin, files...) to a
+  new spot; it snaps to the grid, swaps with an icon already there, and the others stay
+  where they are. The places are kept in C:\$Desktop.ini (they survive a restart).
+  Right-click the desktop > **Auto arrange icons** puts everything back in order
 - **Files on the desktop**: everything in **C:\Desktop** is shown on the desktop, in
   columns from the right-hand edge (folders first). Double-click to open; drag a file or
   folder from File Explorer onto the desktop to move it there (Ctrl = copy), drag desktop
@@ -127,6 +131,13 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Spider Solitaire** (Start > Spider, or `spider`, `spider 1`, `spider 2`, `spider 4`):
+  two decks in 10 columns. Build down from King to Ace in any suit, but only a run of one
+  suit moves together; a full King-to-Ace run of one suit leaves the table - clear all 8.
+  Click the stock (bottom right) or press D to deal a card onto every column (not while a
+  column is empty). Game menu: Easy 1 suit / Medium 2 suits / Hard 4 suits, Restart, Undo
+  (Ctrl+Z), Hint (H - the cards lift and their target is outlined). Double-click a card to
+  send its run to the best place. Score starts at 500: -1 per move, +100 per finished run
 - **FreeCell** (Start > FreeCell, or `freecell`): all cards face up in 8 columns, 4 free
   cells, 4 foundations. Drag cards or runs (as many as your free cells and empty columns
   allow); double-click sends a card to a foundation or a free cell; safe cards fly to the
@@ -238,5 +249,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 21. ✅ Select many files at once (Ctrl/Shift-click, Shift+arrows, Ctrl+A, selection box); copy, move, delete, drag them together
 22. ✅ Right-click menus (Explorer, Recycle Bin, desktop, title bars, taskbar, Notepad, Terminal) and Properties
 23. ✅ Files on the desktop (C:\Desktop): drag to and from File Explorer, right-click New / Paste
-24. More apps on the toolkit, HTTPS (TLS)
-25. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+24. ✅ Spider Solitaire (1, 2 or 4 suits, hints, undo) and movable desktop icons
+25. More apps on the toolkit (Notes, Contacts), HTTPS (TLS)
+26. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

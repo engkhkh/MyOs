@@ -275,6 +275,7 @@ def boot1():
     vm.key('alt-f4'); time.sleep(0.4)
     focus_terminal(vm)
     vm.cmd('widgets', 2); vm.shot('34_widgets', 'v1.3 Widget Gallery'); vm.key('alt-f4'); time.sleep(0.4)
+    spider_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -455,14 +456,32 @@ def menu_tests(vm, x, y, w, cols):
     vm.key('esc'); time.sleep(0.3)
     rclick(vm, 930, 600)
     vm.shot('73_desktop_menu', 'v2.2 right-click on the desktop')
-    vm.click(814 + 40, 600 - 234 + 4 + 5 * 26 + 9 + 13); time.sleep(1.2)   # Task Manager (the menu opens upwards here)
+    vm.click(814 + 40, 600 - MENU_H + 4 + 5 * 26 + 9 + 13); time.sleep(1.2)   # Task Manager (the menu opens upwards here)
     fx, fy, fw = front_rect(vm)
     check('menu', 'the desktop menu opens Task Manager', (fx, fy) != (x, y), (fx, fy, fw))
     vm.shot('74_desktop_menu_taskmgr', 'v2.2 Task Manager opened from the desktop menu')
     vm.key('alt-f4'); time.sleep(0.5)
     desk_tests(vm, x, y, w, cols)
 
-DESK = lambda row: (1024 - 88 + 40, 10 + row * 88 + 40)          # desktop file icons, right-hand column
+DESK = lambda row: (16 + 9 * 96 + 40, 10 + row * 88 + 40)        # desktop file icons, right-hand column
+MENU_H = 8 + 9 * 26 + 2 * 9                                      # the desktop's right-click menu
+
+def spider_tests(vm):
+    """v2.4: Spider Solitaire"""
+    focus_terminal(vm)
+    vm.cmd('spider 2', 4)
+    vm.shot('82_spider', 'v2.4 Spider Solitaire, 2 suits: 10 columns, stock bottom right')
+    vm.key('h'); time.sleep(0.5)
+    vm.shot('83_spider_hint', 'v2.4 H shows a hint (cards lifted, target outlined in yellow)')
+    vm.key('d'); time.sleep(1)
+    vm.shot('84_spider_deal', 'v2.4 D deals one more card onto every column (4 deals left)')
+    vm.key('alt-f4'); time.sleep(0.5)
+    focus_terminal(vm)
+    vm.cmd('spider demo', 4)
+    win = window_origin(vm)
+    vm.drag(win[0] + 130, win[1] + 86, win[0] + 50, win[1] + 372, 9); time.sleep(4)
+    vm.shot('85_spider_win', 'v2.4 Spider: the Ace completes the last run -> the game is won')
+    vm.key('esc'); time.sleep(0.6); vm.key('esc'); time.sleep(0.3); vm.key('alt-f4'); time.sleep(0.4)
 
 def desk_tests(vm, x, y, w, cols):
     """v2.3: files and folders on the desktop (C:\\Desktop)"""
@@ -473,7 +492,7 @@ def desk_tests(vm, x, y, w, cols):
     drag_shot(vm, *DESK(1), ex, ey, '77_drag_from_desktop', 'v2.3 dragging "My notes.txt" from the desktop into the open folder (Docs)')
     rclick(vm, 976, 500)
     vm.shot('78_desktop_new', 'v2.3 right-click the desktop: New folder, New text file, Paste')
-    vm.click(814 + 40, 500 - 234 + 4 + 13); time.sleep(1)       # New folder (the menu opens upwards)
+    vm.click(814 + 40, 500 - MENU_H + 4 + 13); time.sleep(1)    # New folder (the menu opens upwards)
     vm.key(*['backspace'] * 12); vm.type('Stuff\n', 1)
     vm.key('alt-f4'); time.sleep(0.6)                            # the Explorer it opened in
     vm.shot('79_desktop_after', 'v2.3 the desktop now has the folders Stuff and Sub')
@@ -482,6 +501,8 @@ def desk_tests(vm, x, y, w, cols):
     vm.key('alt-f4'); time.sleep(0.6)
     vm.click(*DESK(0)); time.sleep(0.4); vm.key('delete'); time.sleep(1.2)
     vm.shot('81_desktop_delete', 'v2.3 selecting Stuff on the desktop and pressing Delete sends it to the Recycle Bin')
+    drag_shot(vm, 56, 50, 16 + 3 * 96 + 40, 10 + 6 * 88 + 40, '86_icon_drag', 'v2.4 dragging the This PC icon to a new place')
+    vm.shot('87_icon_moved', 'v2.4 This PC stays where it was dropped (saved in C:\\$Desktop.ini)')
     focus_terminal(vm); vm.cmd('explorer', 1.5)
 
 def boot1_bin_checks():
@@ -495,6 +516,7 @@ def boot1_bin_checks():
     want = sorted(['/Docs/Box', '/Desktop/Stuff', '/Docs/Sub/New text file.txt', '/Docs/Sub/New text file (2).txt', '/Docs/Sub/New text file (3).txt',
                    '/Docs/Sub/Ideas for MyOS.txt', '/Docs/Sub/regnote.txt'])
     check('bin', 'the bin holds the 7 deleted items, each with a note of where it came from', sorted(got.values()) == want, got)
+    check('desktop', 'the moved icon\'s place is saved', '@This PC=3,6' in (mtype('/$Desktop.ini') or '') and '@Terminal=0,2' in (mtype('/$Desktop.ini') or ''), mtype('/$Desktop.ini'))
     check('desktop', 'dragged to and from the desktop, new folder made on it',
           mexists('/Desktop/Sub') and mexists('/Docs/My notes.txt') and not mexists('/Desktop/My notes.txt') and not mexists('/Docs/Sub'))
     check('menu', '"Paste into folder" copied the file into C:\\Docs\\Menu', mexists('/Docs/Menu/Ideas for MyOS.txt') and mexists('/Docs/Ideas for MyOS.txt'))
@@ -515,11 +537,16 @@ def boot2_bin(vm):
     vm.key('ret'); time.sleep(1.2)
     vm.shot('49b_bin_emptied', 'v2.0 the Recycle Bin is empty (desktop icon empty too)')
     vm.key('alt-f4'); time.sleep(0.5)
+    vm.shot('49c_icons_after_restart', 'boot 2: This PC is still where it was moved to')
+    rclick(vm, 976, 600)
+    vm.click(814 + 40, 600 - MENU_H + 4 + 6 * 26 + 2 * 9 + 13); time.sleep(1)   # Auto arrange icons
+    vm.shot('49d_auto_arrange', 'v2.4 right-click > Auto arrange icons puts This PC back')
 
 def boot2_disk():
     disk_checks('after boot 2')
     left = [l for l in mtools('mdir', '-b', '-i', OUT + '/part.img', '::/$Recycle').split() if '/R' in l]
     check('bin', 'Empty Recycle Bin removed everything', not left, left)
+    check('desktop', 'Auto arrange icons forgets the saved places', not mexists('/$Desktop.ini'))
 
 def disk_checks(stage):
     p = disk_part()
