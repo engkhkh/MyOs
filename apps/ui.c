@@ -301,6 +301,176 @@ int ui_textbox(int id, int x, int y, int w, char *buf, int max) {
     return enter;
 }
 
+/* ---------------- multi-line text area ---------------- */
+#define TA_LH 18                                      /* line height */
+#define TA_MAXL 3000
+static int ta_start[TA_MAXL + 1];
+/* where each visual line starts, wrapping at cols (at a space when there is one) */
+static int ta_wrap(const char *b, int len, int cols) {
+    int n = 0, i = 0;
+    for (;;) {
+        ta_start[n++] = i;
+        if (n >= TA_MAXL) break;
+        int j = i;
+        while (j < len && b[j] != '\n' && j - i < cols) j++;
+        if (j >= len) break;                          /* the last line */
+        if (b[j] == '\n') { i = j + 1; continue; }
+        int s = j;                                    /* too long: break after the last space */
+        while (s > i && b[s - 1] != ' ') s--;
+        i = s > i ? s : j;
+    }
+    ta_start[n] = len + 1;
+    return n;
+}
+static int ta_line_of(int pos, int n) {
+    int l = 0;
+    while (l + 1 < n && ta_start[l + 1] <= pos) l++;
+    return l;
+}
+static int ta_line_end(const char *b, int len, int l, int n) {   /* last caret position on line l */
+    int e = l + 1 < n ? ta_start[l + 1] : len;
+    if (l + 1 < n && e > ta_start[l] && (b[e - 1] == '\n' || b[e - 1] == ' ')) e--;
+    return e;
+}
+static int ta_pos_at(const char *b, int len, int n, int line, int col) {
+    if (line < 0) return 0;
+    if (line >= n) return len;
+    int p = ta_start[line] + (col < 0 ? 0 : col), e = ta_line_end(b, len, line, n);
+    return p > e ? e : p;
+}
+void ui_textarea_reset(struct ui_textarea *st) { st->caret = st->anchor = st->scroll = st->dragging = 0; }
+static void ta_delete(char *buf, int *len, int a, int b) {        /* remove [a, b) */
+    if (b <= a) return;
+    for (int i = a; i <= *len - (b - a); i++) buf[i] = buf[i + (b - a)];
+    *len -= b - a;
+}
+static int ta_insert(char *buf, int *len, int max, int at, const char *s, int n) {
+    if (*len + n > max - 1) n = max - 1 - *len;
+    if (n <= 0) return 0;
+    for (int i = *len; i >= at; i--) buf[i + n] = buf[i];
+    for (int i = 0; i < n; i++) buf[at + i] = s[i];
+    *len += n;
+    return n;
+}
+int ui_textarea(int id, int x, int y, int w, int h, char *buf, int max, struct ui_textarea *st) {
+    int len = strlen(buf), changed = 0;
+    int cols = (w - 22) / 8, rows = (h - 8) / TA_LH;
+    if (cols < 4) cols = 4;
+    if (rows < 1) rows = 1;
+    int n = ta_wrap(buf, len, cols);
+    if (st->caret > len) st->caret = len;
+    if (st->anchor > len) st->anchor = len;
+    int bar_x = x + w - 10;
+    /* mouse */
+    if (ui.pressed && ui_hit(x, y, w, h)) {
+        ui.focus = id;
+        if (n > rows && ui.mx >= bar_x) {             /* scroll bar: a page up or down */
+            int thumb = y + 4 + (h - 8) * st->scroll / n;
+            st->scroll += ui.my < thumb ? -rows : rows;
+        } else {
+            int l = st->scroll + (ui.my - y - 4) / TA_LH, c = (ui.mx - x - 6 + 4) / 8;
+            st->caret = ta_pos_at(buf, len, n, l, c);
+            if (ui.dbl) {                             /* double-click selects a word */
+                int a = st->caret, b = st->caret;
+                while (a > 0 && buf[a - 1] > ' ') a--;
+                while (b < len && buf[b] > ' ') b++;
+                st->anchor = a; st->caret = b;
+            } else { st->anchor = st->caret; st->dragging = 1; }
+        }
+    } else if (ui.pressed && ui.focus == id && !ui_hit(x, y, w, h)) ui.focus = 0;
+    if (st->dragging) {
+        if (!ui.down) st->dragging = 0;
+        else if (ui.moved) {
+            int my = ui.my;
+            if (my < y) { if (st->scroll > 0) st->scroll--; my = y + 4; }
+            if (my > y + h) { if (st->scroll < n - rows) st->scroll++; my = y + h - 6; }
+            st->caret = ta_pos_at(buf, len, n, st->scroll + (my - y - 4) / TA_LH, (ui.mx - x - 6 + 4) / 8);
+        }
+    }
+    /* keys */
+    int focused = ui.focus == id;
+    if (focused && ui.key) {
+        int k = ui.key, used = 1;
+        int a = st->anchor < st->caret ? st->anchor : st->caret, b = st->anchor < st->caret ? st->caret : st->anchor;
+        int line = ta_line_of(st->caret, n), col = st->caret - ta_start[line];
+        if (k >= 32 && k < 127) {
+            char ch = (char)k;
+            ta_delete(buf, &len, a, b); st->caret = a;
+            st->caret += ta_insert(buf, &len, max, st->caret, &ch, 1); changed = 1;
+        } else if (k == '\n' || k == '\t') {
+            const char *s = k == '\n' ? "\n" : "    ";
+            ta_delete(buf, &len, a, b); st->caret = a;
+            st->caret += ta_insert(buf, &len, max, st->caret, s, strlen(s)); changed = 1;
+        } else if (k == '\b') {
+            if (b > a) { ta_delete(buf, &len, a, b); st->caret = a; changed = 1; }
+            else if (st->caret > 0) { ta_delete(buf, &len, st->caret - 1, st->caret); st->caret--; changed = 1; }
+        } else if (k == KEY_DEL) {
+            if (b > a) { ta_delete(buf, &len, a, b); st->caret = a; changed = 1; }
+            else if (st->caret < len) { ta_delete(buf, &len, st->caret, st->caret + 1); changed = 1; }
+        } else if (k == KEY_LEFT) st->caret = b > a ? a : (st->caret > 0 ? st->caret - 1 : 0);
+        else if (k == KEY_RIGHT) st->caret = b > a ? b : (st->caret < len ? st->caret + 1 : len);
+        else if (k == KEY_UP) st->caret = line > 0 ? ta_pos_at(buf, len, n, line - 1, col) : 0;
+        else if (k == KEY_DOWN) st->caret = line < n - 1 ? ta_pos_at(buf, len, n, line + 1, col) : len;
+        else if (k == KEY_PGUP) st->caret = ta_pos_at(buf, len, n, line - rows, col);
+        else if (k == KEY_PGDN) st->caret = ta_pos_at(buf, len, n, line + rows, col);
+        else if (k == KEY_HOME) st->caret = ta_start[line];
+        else if (k == KEY_END) st->caret = ta_line_end(buf, len, line, n);
+        else if (k == KEY_CTRL('a')) { st->anchor = 0; st->caret = len; used = 2; }
+        else if (k == KEY_CTRL('c') || k == KEY_CTRL('x')) {
+            if (b > a) clipset(buf + a, b - a);
+            if (k == KEY_CTRL('x') && b > a) { ta_delete(buf, &len, a, b); st->caret = a; changed = 1; }
+            used = 2;
+        } else if (k == KEY_CTRL('v')) {
+            static char tmp[4096];
+            int m = clipget(tmp, sizeof tmp - 1);
+            if (m > (int)sizeof tmp - 1) m = sizeof tmp - 1;
+            int q = 0; for (int i = 0; i < m; i++) if ((tmp[i] >= 32 && tmp[i] < 127) || tmp[i] == '\n') tmp[q++] = tmp[i];
+            ta_delete(buf, &len, a, b); st->caret = a;
+            st->caret += ta_insert(buf, &len, max, st->caret, tmp, q); changed = 1;
+        } else if (k == KEY_ESC) { ui.focus = 0; used = 2; }
+        else used = 0;
+        if (used == 1) st->anchor = st->caret;        /* moving or typing ends the selection */
+        if (used) ui.key = 0;
+        buf[len] = 0;
+        if (changed) n = ta_wrap(buf, len, cols);
+        int cl = ta_line_of(st->caret, n);            /* keep the caret in view */
+        if (cl < st->scroll) st->scroll = cl;
+        if (cl >= st->scroll + rows) st->scroll = cl - rows + 1;
+    }
+    if (st->scroll > n - rows) st->scroll = n - rows;
+    if (st->scroll < 0) st->scroll = 0;
+    /* draw */
+    ui_rfill(x, y, w, h, 4, focused ? UI_ACCENT : UI_BORDER);
+    ui_rfill(x + 1, y + 1, w - 2, h - 2, 3, UI_WHITE);
+    int a = st->anchor < st->caret ? st->anchor : st->caret, b = st->anchor < st->caret ? st->caret : st->anchor;
+    ui_clip(x + 1, y + 1, w - 2, h - 2);
+    for (int r = 0; r < rows && st->scroll + r < n; r++) {
+        int l = st->scroll + r, s = ta_start[l], e = l + 1 < n ? ta_start[l + 1] : len, ly = y + 4 + r * TA_LH;
+        char line[260]; int k = 0;
+        for (int i = s; i < e && k < 259 && k < cols + 1; i++) if (buf[i] != '\n') line[k++] = buf[i];
+        line[k] = 0;
+        if (b > a && b > s && a <= e) {               /* selection on this line */
+            int sa = a > s ? a - s : 0, sb = (b < e ? b : e) - s;
+            if (b > e && l + 1 < n) sb++;             /* show that the line break is selected too */
+            ui_fill(x + 6 + sa * 8, ly, (sb - sa) * 8, 16, focused ? 0xBFDBFE : 0xE5E7EB);
+        }
+        ui_text(x + 6, ly, line, UI_TEXT);
+    }
+    if (focused && b == a) {
+        int cl = ta_line_of(st->caret, n);
+        if (cl >= st->scroll && cl < st->scroll + rows)
+            ui_fill(x + 6 + (st->caret - ta_start[cl]) * 8, y + 4 + (cl - st->scroll) * TA_LH, 2, 16, UI_TEXT);
+    }
+    ui_noclip();
+    if (n > rows) {                                   /* scroll bar */
+        int th = (h - 8) * rows / n; if (th < 16) th = 16;
+        int ty = y + 4 + (h - 8 - th) * st->scroll / (n - rows);
+        ui_rfill(bar_x, y + 4, 6, h - 8, 3, 0xF3F4F6);
+        ui_rfill(bar_x, ty, 6, th, 3, 0x9CA3AF);
+    }
+    return changed;
+}
+
 int ui_list(int id, int x, int y, int w, int h, const char *const *items, int n, int *sel, int *scroll) {
     const int RH = 22;
     int vis = (h - 2) / RH, result = 0, old = *sel;

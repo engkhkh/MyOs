@@ -479,6 +479,13 @@ uint32_t proc_syscall(struct regs *r) {
         path_resolve("/", path, abs);
         ret = fs_write(abs, (void *)b, c) ? (int32_t)c : -1;
         break; }
+    case SYS_DELETE: case SYS_MKDIR: {
+        char path[FS_PATH_MAX], abs[FS_PATH_MAX];
+        if (!user_str(t, a, path, sizeof path)) { ret = -1; break; }
+        path_resolve("/", path, abs);
+        if (r->eax == SYS_MKDIR) ret = fs_stat(abs, 0) == 2 || fs_mkdir(abs) ? 0 : -1;
+        else ret = fs_stat(abs, 0) == 1 && fs_delete(abs) ? 0 : -1;
+        break; }
     case SYS_TIME: {
         if (!vmm_user_ok(t->pd, a, 6 * 4)) { ret = -1; break; }
         int *o = (int *)a;

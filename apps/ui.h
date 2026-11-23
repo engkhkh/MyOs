@@ -79,6 +79,12 @@ int  ui_button_primary(int id, int x, int y, int w, int h, const char *label);
 int  ui_checkbox(int id, int x, int y, const char *label, int *value);
 int  ui_radio(int id, int x, int y, const char *label, int *value, int mine);
 int  ui_textbox(int id, int x, int y, int w, char *buf, int max);   /* 1 when Enter is pressed */
+/* Multi-line text: word wrap, caret, Shift-less selection by mouse drag, Ctrl+A/C/X/V,
+ * arrows, Home/End, PgUp/PgDn, scrolling. Keep one struct ui_textarea per text area.
+ * Returns 1 when the text changed this frame. */
+struct ui_textarea { int caret, anchor, scroll, dragging; };
+int  ui_textarea(int id, int x, int y, int w, int h, char *buf, int max, struct ui_textarea *st);
+void ui_textarea_reset(struct ui_textarea *st);              /* caret to the start, nothing selected */
 int  ui_list(int id, int x, int y, int w, int h, const char *const *items, int n, int *sel, int *scroll);
                                                                     /* 1 = selection changed, 2 = double-click / Enter */
 void ui_progress(int x, int y, int w, int h, int value, int max);

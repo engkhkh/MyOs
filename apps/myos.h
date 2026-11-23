@@ -84,6 +84,8 @@ static inline void getfont(uint8_t *buf, int bold) { sys(SYS_FONT, (uint32_t)buf
 static inline int set_wallpaper(const char *path) { return sys(SYS_WALLPAPER, (uint32_t)path, 0, 0, 0, 0); }
 static inline void resizable(int min_w, int min_h) { sys(SYS_RESIZABLE, (uint32_t)min_w, (uint32_t)min_h, 0, 0, 0); }
 static inline int clipget(char *buf, int max)       { return sys(SYS_CLIPGET, (uint32_t)buf, (uint32_t)max, 0, 0, 0); }
+static inline int deletefile(const char *p)  { return sys(SYS_DELETE, (uint32_t)p, 0, 0, 0, 0); }
+static inline int makedir(const char *p)     { return sys(SYS_MKDIR, (uint32_t)p, 0, 0, 0, 0); }
 
 /* Memory: provided by malloc.c, which is linked into every program. */
 void *malloc(uint32_t size);

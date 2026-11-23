@@ -62,7 +62,8 @@ class VM:
         for k in keys: self.mon('sendkey ' + k); time.sleep(gap)
     KEYMAP = {'"': 'shift-apostrophe', ' ': 'spc', '.': 'dot', '\\': 'backslash', '/': 'slash', '-': 'minus',
               ':': 'shift-semicolon', '\n': 'ret', '(': 'shift-9', ')': 'shift-0', '!': 'shift-1', '_': 'shift-minus',
-              '=': 'equal', '*': 'shift-8', '+': 'shift-equal', '%': 'shift-5', ',': 'comma', "'": 'apostrophe'}
+              '=': 'equal', '*': 'shift-8', '+': 'shift-equal', '%': 'shift-5', ',': 'comma', "'": 'apostrophe',
+              '\t': 'tab', '@': 'shift-2'}
     def type(self, text, settle=0.3):
         for ch in text:
             k = self.KEYMAP.get(ch) or ('shift-' + ch.lower() if ch.isupper() else ch)
@@ -276,6 +277,8 @@ def boot1():
     focus_terminal(vm)
     vm.cmd('widgets', 2); vm.shot('34_widgets', 'v1.3 Widget Gallery'); vm.key('alt-f4'); time.sleep(0.4)
     spider_tests(vm)
+    notes_tests(vm)
+    contacts_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -466,6 +469,38 @@ def menu_tests(vm, x, y, w, cols):
 DESK = lambda row: (16 + 9 * 96 + 40, 10 + row * 88 + 40)        # desktop file icons, right-hand column
 MENU_H = 8 + 9 * 26 + 2 * 9                                      # the desktop's right-click menu
 
+def notes_tests(vm):
+    """v2.5: Notes"""
+    focus_terminal(vm)
+    vm.cmd('notes', 3)
+    vm.shot('88_notes', 'v2.5 Notes: the notes in C:\\Notes, newest editor on the right')
+    vm.key('ctrl-n'); time.sleep(0.4)
+    vm.type('Trip to Jeddah\nPack sunscreen and a hat, and remember to book the hotel near the sea before Friday.\nBook the hotel', 2)
+    vm.shot('89_notes_typed', 'v2.5 a new note: the text wraps, and it saves itself (status: Saved)')
+    vm.key('ctrl-f'); vm.type('spider', 1)
+    vm.shot('90_notes_search', 'v2.5 searching for "spider" leaves only the note that mentions it')
+    vm.key(*['backspace'] * 6); time.sleep(0.5)
+    win = window_origin(vm)
+    vm.click(win[0] + 60, win[1] + 180); time.sleep(0.5)       # the 2nd note: Book ideas
+    vm.click(win[0] + 725, win[1] + 45); time.sleep(0.6)       # Delete
+    vm.shot('91_notes_delete', 'v2.5 Delete asks first')
+    vm.key('ret'); time.sleep(0.8)
+    vm.key('alt-f4'); time.sleep(0.5)
+
+def contacts_tests(vm):
+    """v2.5: Contacts"""
+    focus_terminal(vm)
+    vm.cmd('contacts', 3)
+    vm.shot('92_contacts', 'v2.5 Contacts: A-Z list with initials, details on the right')
+    vm.key('ctrl-n'); time.sleep(0.4)
+    vm.type('Zed Test\t+1 555 1234\tbad-email\n', 1)
+    vm.shot('93_contacts_check', 'v2.5 Enter saves - but first the email address is checked')
+    vm.key('end'); vm.key(*['backspace'] * 9); vm.type('zed@example.com\n', 1.2)
+    vm.shot('94_contacts_saved', 'v2.5 fixed and saved: Zed Test is in the list (A to Z)')
+    vm.key('ctrl-f'); vm.type('cairo', 1)
+    vm.shot('95_contacts_search', 'v2.5 the search looks in every field: "cairo" finds Omar')
+    vm.key('alt-f4'); time.sleep(0.5)
+
 def spider_tests(vm):
     """v2.4: Spider Solitaire"""
     focus_terminal(vm)
@@ -516,6 +551,12 @@ def boot1_bin_checks():
     want = sorted(['/Docs/Box', '/Desktop/Stuff', '/Docs/Sub/New text file.txt', '/Docs/Sub/New text file (2).txt', '/Docs/Sub/New text file (3).txt',
                    '/Docs/Sub/Ideas for MyOS.txt', '/Docs/Sub/regnote.txt'])
     check('bin', 'the bin holds the 7 deleted items, each with a note of where it came from', sorted(got.values()) == want, got)
+    trip = mtype('/Notes/Trip to Jeddah.txt') or ''
+    check('notes', 'a new note is saved as C:\\Notes\\<its title>.txt', trip.startswith('Trip to Jeddah') and 'Book the hotel' in trip, trip[:60])
+    check('notes', 'a deleted note\'s file is gone, the others stay', not mexists('/Notes/Book ideas.txt') and mexists('/Notes/Weekend plans.txt'))
+    book = mtype('/Contacts/Contacts.txt') or ''
+    check('contacts', 'the new contact is saved in C:\\Contacts\\Contacts.txt',
+          'Name: Zed Test\nPhone: +1 555 1234\nEmail: zed@example.com' in book and 'Name: Sara Ahmed' in book, book[-120:])
     check('desktop', 'the moved icon\'s place is saved', '@This PC=3,6' in (mtype('/$Desktop.ini') or '') and '@Terminal=0,2' in (mtype('/$Desktop.ini') or ''), mtype('/$Desktop.ini'))
     check('desktop', 'dragged to and from the desktop, new folder made on it',
           mexists('/Desktop/Sub') and mexists('/Docs/My notes.txt') and not mexists('/Desktop/My notes.txt') and not mexists('/Docs/Sub'))

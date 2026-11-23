@@ -45,6 +45,8 @@
 #define SYS_FONT      38   /* font(buf, bold): copy the 8x16 system font (128 chars x 16 bytes) into buf */
 #define SYS_WALLPAPER 39   /* wallpaper(path): use this .png / .bmp as the desktop background; 0 = ok */
 #define SYS_RESIZABLE 40   /* resizable(min_w, min_h): the user may resize / maximise the window; EV_RESIZE tells the new size */
+#define SYS_DELETE    41   /* deletefile(path): delete a file (not a folder); 0 = ok, -1 = error */
+#define SYS_MKDIR     42   /* makedir(path): make a folder; 0 = ok (or it already exists), -1 = error */
 #define SYS_CLIPGET   37   /* clipget(buf, max): copy clipboard text into buf; returns its full length */
 
 /* Folder entries returned by listdir() */

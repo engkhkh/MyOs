@@ -12,7 +12,12 @@ printf 'MyOS README\n===========\nA Windows-style operating system written from 
 printf 'Ideas for MyOS\n- Paint app\n- Games\n- Networking\n- Run on a watch\n' > "$T/Ideas for MyOS.txt"
 printf 'Shopping list\n- milk\n- bread\n- coffee\n' > "$T/shopping list.txt"
 mcopy -i "$IMG" "$T/Welcome.txt" "$T/README.TXT" ::/
-mmd -i "$IMG" ::/Docs ::/Pictures ::/Desktop
+mmd -i "$IMG" ::/Docs ::/Pictures ::/Desktop ::/Notes ::/Contacts
+printf 'Weekend plans\n\n- Finish the Spider game (2 suits!)\n- Call grandma\n- Clean the desk\n' > "$T/Weekend plans.txt"
+printf 'Book ideas\n\nA story about an operating system that learns to dream.\n' > "$T/Book ideas.txt"
+mcopy -i "$IMG" "$T/Weekend plans.txt" "$T/Book ideas.txt" ::/Notes/
+printf 'Name: Sara Ahmed\nPhone: +966 50 123 4567\nEmail: sara.ahmed@example.com\nAddress: Riyadh\nBirthday: 14 March\n\nName: Omar Hassan\nPhone: +20 100 555 0199\nEmail: omar@example.com\nAddress: Cairo\n\nName: Lina Khaled\nPhone: 050 222 3344\nEmail: lina.k@example.com\nNotes: Met at the conference\n\nName: David Miller\nPhone: +44 20 7946 0000\nEmail: david@example.co.uk\nAddress: London\n\n' > "$T/Contacts.txt"
+mcopy -i "$IMG" "$T/Contacts.txt" ::/Contacts/
 printf 'My notes\n\nAnything you put in C:\\Desktop shows up on the desktop.\nDrag files here from File Explorer, or right-click the\ndesktop for New folder / New text file.\n' > "$T/My notes.txt"
 mcopy -i "$IMG" "$T/My notes.txt" ::/Desktop/
 mcopy -i "$IMG" "$T/Ideas for MyOS.txt" "$T/shopping list.txt" ::/Docs/

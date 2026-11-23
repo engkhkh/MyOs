@@ -4,7 +4,7 @@ LDFLAGS = -m elf_i386 -T linker.ld
 
 OBJS = boot.o interrupts.o kernel.o idt.o mm.o gfx.o mouse.o shell.o wm.o ata.o fat32.o proc.o sound.o e1000.o net.o settings.o image.o jpeg.o
 
-APPS = apps/hello.elf apps/bounce.elf apps/spin.elf apps/guess.elf apps/crash.elf apps/paint.elf apps/snake.elf apps/mines.elf apps/music.elf apps/viewer.elf apps/web.elf apps/calc.elf apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/widgets.elf
+APPS = apps/hello.elf apps/bounce.elf apps/spin.elf apps/guess.elf apps/crash.elf apps/paint.elf apps/snake.elf apps/mines.elf apps/music.elf apps/viewer.elf apps/web.elf apps/calc.elf apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/notes.elf apps/contacts.elf apps/widgets.elf
 UCFLAGS = -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -fno-builtin -mgeneral-regs-only -O2 -Wall -Wextra
 
 all: myos.bin myos-grub.bin $(APPS)
@@ -27,7 +27,7 @@ apps/jpeg.o: jpeg.c image.h
 	gcc $(UCFLAGS) -c $< -o $@
 
 # programs that use the widget toolkit (apps/ui.c)
-UI_APPS = apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/widgets.elf apps/viewer.elf apps/web.elf
+UI_APPS = apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/notes.elf apps/contacts.elf apps/widgets.elf apps/viewer.elf apps/web.elf
 $(UI_APPS): apps/%.elf: apps/crt0.o apps/malloc.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/%.o apps/user.ld
 	ld -m elf_i386 --no-warn-rwx-segments -T apps/user.ld -o $@ apps/crt0.o apps/$*.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/malloc.o
 
