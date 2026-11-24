@@ -266,7 +266,7 @@ static void run(const char *cmd) {
         con_color(14); con_print("Tests:   "); con_color(7); con_print("beep, bsod, pagefault  (crash the kernel on purpose)\n");
         con_color(14); con_print("Power:   "); con_color(7); con_print("reboot, shutdown\n");
     } else if (!kstrcmp(cmd, "about") || !kstrcmp(cmd, "ver")) {
-        con_print("MyOS 2.5 - 32-bit x86. Settings, networking, sound, multitasking,\n");
+        con_print("MyOS 2.6 - 32-bit x86. Settings, networking, sound, multitasking,\n");
         con_print("FAT32 disk, graphics desktop, mouse, windows. Built from scratch.\n");
     } else if (!kstrcmp(cmd, "mem")) {
         struct mm_stats st; mm_stats(&st);
@@ -465,7 +465,7 @@ void con_key(int k) {
 
 void con_init(void) {
     clear();
-    con_color(11); con_print("MyOS [Version 2.5]\n"); con_color(7);
+    con_color(11); con_print("MyOS [Version 2.6]\n"); con_color(7);
     con_print("Type 'help' for commands. Up/Down arrows recall history.\n");
     if (fs_mounted()) { con_print("Drive C: ready, "); con_num(fs_free_kb() / 1024); con_print(" MB free.\n\n"); }
     else con_print("No FAT32 disk found: file commands are unavailable.\n\n");

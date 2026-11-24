@@ -395,7 +395,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.5", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 2.6", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -435,7 +435,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.5  -  Notes and Contacts", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 2.6  -  Calendar", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -2611,12 +2611,12 @@ static void draw_window(int app, int is_focused) {
 
 /* ---------- taskbar & start menu ---------- */
 #define START_W 300
-#define START_ITEM_H 30
-static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Spider", "Notes", "Contacts", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)", "", "Restart", "Shut down" };
-static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, -19, -20, -21, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4, -1, -2, -3 };
-static const char *start_programs[] = { "/Apps/paint.elf", "/Apps/snake.elf", "/Apps/mines.elf", "/Apps/music.elf", "/Apps/viewer.elf", "/Apps/web.elf", "/Apps/calc.elf", "/Apps/solitaire.elf", "/Apps/freecell.elf", "/Apps/spider.elf", "/Apps/notes.elf", "/Apps/contacts.elf" };
-#define NSTART 22
-#define START_SEP 19
+#define START_ITEM_H 29
+static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Spider", "Notes", "Contacts", "Calendar", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)", "", "Restart", "Shut down" };
+static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, -19, -20, -21, -22, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4, -1, -2, -3 };
+static const char *start_programs[] = { "/Apps/paint.elf", "/Apps/snake.elf", "/Apps/mines.elf", "/Apps/music.elf", "/Apps/viewer.elf", "/Apps/web.elf", "/Apps/calc.elf", "/Apps/solitaire.elf", "/Apps/freecell.elf", "/Apps/spider.elf", "/Apps/notes.elf", "/Apps/contacts.elf", "/Apps/calendar.elf" };
+#define NSTART 23
+#define START_SEP 20
 static int start_h(void) { return 64 + NSTART * START_ITEM_H - 24; }
 static int start_item_y(int i) { int y0 = gfx_h - TASKBAR_H - start_h() + 64; return y0 + i * START_ITEM_H - (i > START_SEP ? 24 : 0); }
 
@@ -2650,7 +2650,8 @@ static void draw_taskbar(void) {
         gfx_rfill(bx + bw / 2 - (active ? 14 : 4), y + TASKBAR_H - 7, active ? 28 : 8, 3, 1, active ? C_ACCENT_HI : 0x9CA3AF);
         slot++;
     }
-    /* clock and date */
+    /* clock and date (click: Calendar) */
+    if (hover_key == 101) gfx_rfill(gfx_w - 94, y + 4, 90, TASKBAR_H - 8, 6, C_TASK_HI);
     int hh, mm, ss, d, mo, yr; rtc_time(&hh, &mm, &ss); rtc_date(&d, &mo, &yr);
     char t[6] = "00:00", dt[11] = "00/00/2000";
     two_digits(t, hh); two_digits(t + 3, mm);
@@ -3186,6 +3187,7 @@ static int compute_hover(void) {
     }
     if (my >= gfx_h - TASKBAR_H) {
         if (mx < 108) return 100;
+        if (mx >= gfx_w - 96) return 101;                      /* the clock: opens Calendar */
         int slot = 0;
         for (int a = 0; a < NWIN; a++) {
             if (!find(a)) continue;
@@ -3251,6 +3253,7 @@ static void left_click(void) {
     /* Taskbar */
     if (my >= gfx_h - TASKBAR_H) {
         if (mx < 108) { start_open = !start_open; start_hover = -1; dirty = 1; return; }
+        if (mx >= gfx_w - 96) { start_open = 0; run_program("/Apps/calendar.elf"); dirty = 1; return; }   /* the clock */
         if (hover_key >= 200 && hover_key < 300) {
             int a = hover_key - 200;
             if (focused() == a) wins[a].minimized = 1; else focus(a);

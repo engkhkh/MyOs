@@ -279,6 +279,7 @@ def boot1():
     spider_tests(vm)
     notes_tests(vm)
     contacts_tests(vm)
+    calendar_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -487,6 +488,24 @@ def notes_tests(vm):
     vm.key('ret'); time.sleep(0.8)
     vm.key('alt-f4'); time.sleep(0.5)
 
+def calendar_tests(vm):
+    """v2.6: Calendar"""
+    focus_terminal(vm)
+    vm.cmd('calendar', 3)
+    vm.shot('96_calendar', 'v2.6 Calendar: this month, today circled, events shown in the days')
+    vm.type('14:30\tDentist check-up\n', 1)                   # typing a digit starts the time box
+    vm.type('9\tStand-up\n', 1)
+    vm.shot('97_calendar_added', 'v2.6 two events added to today, listed by time on the right')
+    win = window_origin(vm)
+    vm.click(win[0] + 854, win[1] + 24 + 66 + 17); time.sleep(0.8)   # x on the first (09:00) event
+    vm.shot('98_calendar_deleted', 'v2.6 the x deletes an event')
+    vm.key('esc'); vm.key('pgdn'); time.sleep(0.6)
+    vm.shot('99_calendar_next', 'v2.6 PgDn shows the next month')
+    vm.key('alt-f4'); time.sleep(0.6)
+    vm.click(980, 750); time.sleep(3)                            # the clock on the taskbar
+    vm.shot('99b_calendar_clock', 'v2.6 clicking the clock on the taskbar opens Calendar')
+    vm.key('alt-f4'); time.sleep(0.5)
+
 def contacts_tests(vm):
     """v2.5: Contacts"""
     focus_terminal(vm)
@@ -555,6 +574,9 @@ def boot1_bin_checks():
     check('notes', 'a new note is saved as C:\\Notes\\<its title>.txt', trip.startswith('Trip to Jeddah') and 'Book the hotel' in trip, trip[:60])
     check('notes', 'a deleted note\'s file is gone, the others stay', not mexists('/Notes/Book ideas.txt') and mexists('/Notes/Weekend plans.txt'))
     book = mtype('/Contacts/Contacts.txt') or ''
+    cal = mtype('/Calendar/Events.txt') or ''
+    check('calendar', 'events added and deleted are saved in C:\\Calendar\\Events.txt',
+          ' 14:30 Dentist check-up' in cal and 'Stand-up' not in cal and 'Dinner with Sara' in cal, cal)
     check('contacts', 'the new contact is saved in C:\\Contacts\\Contacts.txt',
           'Name: Zed Test\nPhone: +1 555 1234\nEmail: zed@example.com' in book and 'Name: Sara Ahmed' in book, book[-120:])
     check('desktop', 'the moved icon\'s place is saved', '@This PC=3,6' in (mtype('/$Desktop.ini') or '') and '@Terminal=0,2' in (mtype('/$Desktop.ini') or ''), mtype('/$Desktop.ini'))

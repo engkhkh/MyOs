@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.5 (stage 25: Notes and Contacts). A 32-bit x86 operating system with a graphical
+Version 2.6 (stage 26: Calendar). A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -131,6 +131,13 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Calendar** (Start > Calendar, `calendar`, or click the clock on the taskbar): a month
+  view with today circled and each day's events as coloured labels. Click a day (or use
+  the arrow keys) to see its events on the right; type a time (9, 930, 14:30 - or nothing
+  for all day) and what it is, then press Enter. Just start typing: digits go to the time,
+  letters to the title. The x deletes an event. PgUp/PgDn change the month, T jumps to
+  today. Events are kept in **C:\Calendar\Events.txt**, one per line
+  (`2026-11-24 14:30 Dentist`, `--:--` = all day)
 - **Notes** (Start > Notes, or `notes`): quick notes that save themselves a moment after
   you stop typing. Each note is a text file in **C:\Notes** named after its first line
   (so it also opens in Notepad and File Explorer). The list on the left shows each title
@@ -265,5 +272,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 23. ✅ Files on the desktop (C:\Desktop): drag to and from File Explorer, right-click New / Paste
 24. ✅ Spider Solitaire (1, 2 or 4 suits, hints, undo) and movable desktop icons
 25. ✅ Notes and Contacts apps; multi-line text widget; delete-file / make-folder system calls
-26. More apps (Calendar, a text-based Mail), HTTPS (TLS)
-27. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+26. ✅ Calendar (month view, events, opens from the taskbar clock); the date now follows the time zone
+27. More apps (a text-based Mail, Photos), HTTPS (TLS)
+28. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

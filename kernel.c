@@ -22,6 +22,18 @@ void rtc_time(int *h, int *m, int *s) {
 void rtc_date(int *d, int *mo, int *y) {
     while (cmos(0x0A) & 0x80) {}
     *d = bcd(cmos(0x07)); *mo = bcd(cmos(0x08)); *y = 2000 + bcd(cmos(0x09));
+    int h = bcd(cmos(0x04)) + tz_offset;                     /* the clock is UTC: the time zone can */
+    static const int mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };   /* move the date too */
+    int leap = (*y % 4 == 0 && *y % 100 != 0) || *y % 400 == 0;
+    if (h >= 24) {
+        if (++*d > mdays[*mo - 1] + (*mo == 2 && leap)) { *d = 1; if (++*mo > 12) { *mo = 1; ++*y; } }
+    } else if (h < 0) {
+        if (--*d < 1) {
+            if (--*mo < 1) { *mo = 12; --*y; }
+            leap = (*y % 4 == 0 && *y % 100 != 0) || *y % 400 == 0;
+            *d = mdays[*mo - 1] + (*mo == 2 && leap);
+        }
+    }
 }
 int rtc_tz(void) { return tz_offset; }
 void rtc_set_tz(int h) { if (h >= -12 && h <= 14) tz_offset = h; }

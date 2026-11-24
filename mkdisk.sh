@@ -12,7 +12,11 @@ printf 'MyOS README\n===========\nA Windows-style operating system written from 
 printf 'Ideas for MyOS\n- Paint app\n- Games\n- Networking\n- Run on a watch\n' > "$T/Ideas for MyOS.txt"
 printf 'Shopping list\n- milk\n- bread\n- coffee\n' > "$T/shopping list.txt"
 mcopy -i "$IMG" "$T/Welcome.txt" "$T/README.TXT" ::/
-mmd -i "$IMG" ::/Docs ::/Pictures ::/Desktop ::/Notes ::/Contacts
+mmd -i "$IMG" ::/Docs ::/Pictures ::/Desktop ::/Notes ::/Contacts ::/Calendar
+# a few sample events around the day the disk is made
+{ echo "$(date -d '+2 days' +%Y-%m-%d) 19:30 Dinner with Sara"; echo "$(date -d '+6 days' +%Y-%m-%d) 09:00 Team meeting";
+  echo "$(date -d '+6 days' +%Y-%m-%d) --:-- Pay the rent"; echo "$(date -d '+20 days' +%Y-%m-%d) 16:00 Dentist"; } > "$T/Events.txt"
+mcopy -i "$IMG" "$T/Events.txt" ::/Calendar/
 printf 'Weekend plans\n\n- Finish the Spider game (2 suits!)\n- Call grandma\n- Clean the desk\n' > "$T/Weekend plans.txt"
 printf 'Book ideas\n\nA story about an operating system that learns to dream.\n' > "$T/Book ideas.txt"
 mcopy -i "$IMG" "$T/Weekend plans.txt" "$T/Book ideas.txt" ::/Notes/
