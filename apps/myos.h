@@ -37,6 +37,10 @@ static inline int sys(int n, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uin
 #define KEY_DESK_PREV  0x118          /* Win+Ctrl+Left */
 #define KEY_DESK_NEW   0x119          /* Win+Ctrl+D */
 #define KEY_DESK_CLOSE 0x11A          /* Win+Ctrl+F4 */
+#define KEY_LAYOUT     0x11B          /* Alt+Shift / Win+Space: the keyboard language changed */
+#define KEY_UNI(cp)    (0x10000 | (cp))   /* a typed character beyond ASCII (Arabic) */
+#define KEY_IS_UNI(k)  ((k) & 0x10000)
+#define KEY_CP(k)      ((k) & 0xFFFF)
 #define KEY_CTRL(c) (0x200 | (c))
 
 static inline void exit(int code)            { sys(SYS_EXIT, code, 0, 0, 0, 0); }

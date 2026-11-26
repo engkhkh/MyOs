@@ -6,3 +6,4 @@
 disk.img
 disk.img.gz
 iso/
+__pycache__/

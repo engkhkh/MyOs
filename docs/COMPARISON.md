@@ -1,6 +1,6 @@
 # MyOS compared with Windows 11, macOS and Ubuntu Linux
 
-Written for MyOS 2.7 and kept up to date (2.9: dark mode and virtual desktops added). "Yes" means the feature exists and works in
+Written for MyOS 2.7 and kept up to date (2.8 dark mode, 2.9 virtual desktops, 3.0 Arabic added). "Yes" means the feature exists and works in
 MyOS today; "Partly" means a simpler version exists; "No" means it is missing.
 The big three are mature systems built by large teams over decades; MyOS is a
 from-scratch learning OS, so the point of this table is to show what is
@@ -25,7 +25,7 @@ there, what is simpler, and what to build next.
 | Desktop icons | Yes | Yes | Extension | Yes, files in C:\Desktop, movable |
 | Dark mode / themes | Yes | Yes | Yes | **Dark mode (2.8)**, accent colours, wallpapers |
 | Accessibility | Narrator, magnifier, high contrast | VoiceOver, zoom | Orca, zoom | **No** |
-| Languages / right-to-left | Many, incl. Arabic | Many, incl. Arabic | Many, incl. Arabic | **English only, no Arabic / RTL** |
+| Languages / right-to-left | Many, incl. Arabic | Many, incl. Arabic | Many, incl. Arabic | English and **Arabic (3.0)**: keyboard, joined letters, right to left, Arabic file names; no other scripts yet |
 | Fonts | Scalable (TrueType), many | Scalable | Scalable | One bitmap font (8x16), 2x/6x scaled |
 | Graphics | GPU drivers, DirectX | Metal | Mesa / Vulkan | Framebuffer only (no GPU acceleration) |
 | Sound | Mixer, many devices | Core Audio | PipeWire | PC speaker + Sound Blaster 16, one volume |
@@ -70,7 +70,7 @@ built into MyOS 2.7:
 
 ## What is still missing (the next steps, roughly in order)
 
-- Arabic and right-to-left text, and a scalable font
+- A scalable (vector) font, other scripts (Hebrew, Chinese...) and full Unicode bidi rules
 - Accessibility: magnifier, high contrast, keyboard-only navigation everywhere
 - HTTPS (TLS) so the browser can open real sites
 - User accounts with file permissions (needs a file system with permissions)

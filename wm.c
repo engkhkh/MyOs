@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include "kernel.h"
 #include "image.h"
+#include "text.h"
 
 /* ---------- colours ---------- */
 #define C_TASKBAR    0x101827
@@ -406,7 +407,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.9", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 3.0", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -446,7 +447,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.9  -  Virtual desktops", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 3.0  -  Arabic and right-to-left", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -469,11 +470,49 @@ static void textbox(int x, int y, int w, const char *s, int active) {
     gfx_rect(x, y, w, 24, active ? C_ACCENT : 0xD1D5DB);
     if (active) gfx_fill(x + 1, y + 22, w - 2, 1, C_ACCENT);
     int n = 0; while (s[n]) n++;
-    int maxc = (w - 12) / 8, start = n > maxc ? n - maxc : 0;
-    gfx_text(x + 6, y + 4, s + start, C_TEXT, 0);
-    if (active && caret_on) gfx_fill(x + 6 + (n - start) * 8, y + 4, 2, 16, C_TEXT);
+    static struct tcell cells[TEXT_MAX];
+    int rtl, m = text_layout_para(s, n, cells, TEXT_MAX, &rtl);
+    int maxc = (w - 12) / 8;
+    if (!rtl) {                                        /* left to right: the end stays in view, caret after it */
+        int start = m > maxc ? m - maxc : 0;
+        for (int k = start; k < m; k++) gfx_cell(x + 6 + (k - start) * 8, y + 4, cells[k].cp, C_TEXT, 0);
+        if (active && caret_on) gfx_fill(x + 6 + (m - start) * 8, y + 4, 2, 16, C_TEXT);
+    } else {                                           /* right to left: lined up on the right, the end is on the left */
+        int shown = m > maxc ? maxc : m, x0 = x + w - 6 - shown * 8;
+        for (int k = 0; k < shown; k++) gfx_cell(x0 + k * 8, y + 4, cells[k].cp, C_TEXT, 0);
+        if (active && caret_on) gfx_fill(x0 - 2, y + 4, 2, 16, C_TEXT);
+    }
+}
+/* Typing into a one-line field (caret at the end): Backspace removes a whole character,
+   Arabic letters arrive as KEY_UNI. Returns 1 if the text changed. */
+static int field_key(char *f, int max, int k) {
+    int n = 0; while (f[n]) n++;
+    if (k == '\b') { if (!n) return 0; f[utf8_prev(f, n)] = 0; return 1; }
+    char b[4]; int len = 0;
+    if (KEY_IS_UNI(k)) len = utf8_encode(KEY_CP(k), b);
+    else if (k >= 32 && k < 127) { b[0] = (char)k; len = 1; }
+    if (!len || n + len > max - 1) return 0;
+    for (int i = 0; i < len; i++) f[n + i] = b[i];
+    f[n + len] = 0;
+    return 1;
 }
 static int kstrlen_(const char *s) { int n = 0; while (s[n]) n++; return n; }
+/* Split a name into two lines of at most per characters (at a space if there is one);
+   a second line that is too long ends in "..". Works in characters, so Arabic names split cleanly. */
+static void two_lines(const char *nm, int per, char *l1, char *l2) {
+    int len = kstrlen_(nm), chars = utf8_count(nm, 0, len), cut = utf8_skip(nm, len, 0, per);
+    if (chars > per)
+        for (int k = cut; k > 2; k = utf8_prev(nm, k)) if (nm[k] == ' ') { cut = k; break; }
+    int i; for (i = 0; i < cut; i++) l1[i] = nm[i]; l1[i] = 0;
+    l2[0] = 0;
+    if (cut >= len) return;
+    const char *rest = nm + cut + (nm[cut] == ' ');
+    int rl = kstrlen_(rest), e = utf8_skip(rest, rl, 0, per);
+    if (e < rl) e = utf8_skip(rest, rl, 0, per - 2);
+    for (i = 0; i < e; i++) l2[i] = rest[i];
+    if (e < rl) { l2[i++] = '.'; l2[i++] = '.'; }
+    l2[i] = 0;
+}
 static void kcpy_n(char *d, const char *s, int n) { for (int i = 0; i < n; i++) d[i] = s[i]; }
 
 /* ---------- the system clipboard (text), shared by Notepad, the Terminal and programs ---------- */
@@ -588,9 +627,11 @@ static void note_undo(void) {
 }
 
 /* Row/column of the caret placed before character p (same wrapping as drawing). */
+#define NOTE_CONT(i) (((unsigned char)note[i] & 0xC0) == 0x80)   /* the 2nd/3rd byte of a UTF-8 character */
 static void note_rc(int p, int *row, int *col) {
     int cx = 0, cy = 0, cols = note_cols;
     for (int i = 0; i < p; i++) {
+        if (NOTE_CONT(i)) continue;
         if (note[i] == '\n') { cx = 0; cy++; continue; }
         if (cx >= cols) { cx = 0; cy++; }
         cx++;
@@ -605,6 +646,7 @@ static int note_pos_at(int row, int col) {
     for (int i = 0; i <= note_len; i++) {
         int r = cy, c = cx;
         if (cx >= cols && i < note_len && note[i] != '\n') { r = cy + 1; c = 0; }
+        if (i < note_len && NOTE_CONT(i)) continue;
         if (r == row && c <= col) best = i;
         if (r > row) break;
         if (i == note_len) break;
@@ -613,6 +655,15 @@ static int note_pos_at(int row, int col) {
         cx++;
     }
     return best >= 0 ? best : note_len;
+}
+/* Where the row starting at a ends (before its newline, or where it wraps). */
+static int note_row_end(int a) {
+    int b = a, cx = 0;
+    while (b < note_len && note[b] != '\n') {
+        if (!NOTE_CONT(b)) { if (cx >= note_cols) break; cx++; }
+        b++;
+    }
+    return b;
 }
 
 static void note_delete_range(int a, int b) {
@@ -648,7 +699,7 @@ static void note_paste(void) {
     note_insert(tmp, k);
     note_set_status("Pasted");
 }
-static int is_word(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
+static int is_word(char c) { return (unsigned char)c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
 
 /* ---- Find / Replace bar ---- */
 #define FIND_ROW 34
@@ -786,40 +837,62 @@ static void draw_notepad(int x, int y, int w, int h) {
     if (crow < note_top) note_top = crow;
     if (crow >= note_top + note_rows) note_top = crow - note_rows + 1;
     int lo = has_sel() ? sel_lo() : -1, hi = has_sel() ? sel_hi() : -1;
-    int cx = 0, cy = 0, first = note_top;
+    int cy = 0, first = note_top, rtl_caret = 0;
     int active = focused() == APP_NOTEPAD && !note_field_focus && !find_focus;
     int hl_until = -1, fn = find_open ? kstrlen_(find_text) : 0;   /* every match gets a yellow mark */
+    uint32_t selc = active || find_focus ? C_ACCENT_LIGHT : 0xE5E7EB;
     gfx_clip(x, ty, w, th);
-    for (int i = 0; i < note_len && cy < first + note_rows; i++) {
-        char ch = note[i];
-        int in_sel = i >= lo && i < hi;
-        if (ch == '\n') {
-            if (in_sel && cy >= first) gfx_fill(x + 8 + cx * 8, ty + 4 + (cy - first) * 16, 6, 16, active ? C_ACCENT_LIGHT : 0xE5E7EB);
-            cx = 0; cy++; continue;
+    for (int a = 0; cy < first + note_rows; ) {               /* one screen row at a time */
+        int b = note_row_end(a), next = b < note_len && note[b] == '\n' ? b + 1 : b;
+        if (cy >= first) {
+            int py = ty + 4 + (cy - first) * 16;
+            if (fn && hl_until < a) for (int q = a - fn + 1 < 0 ? 0 : a - fn + 1; q < a; q++) if (match_at(q)) { hl_until = q + fn; break; }
+            if (!text_has_rtl(note + a, b - a)) {             /* left to right: one cell per character */
+                int cx = 0;
+                for (int q = a; q < b; cx++) {
+                    int at = q, cp = utf8_decode(note, b, &q);
+                    if (fn && at >= hl_until && match_at(at)) hl_until = at + fn;
+                    int px = x + 8 + cx * 8;
+                    if (at >= lo && at < hi) gfx_fill(px, py, 8, 16, selc);
+                    else if (at < hl_until) gfx_fill(px, py, 8, 16, 0xFEF08A);
+                    gfx_cell(px, py, cp == '\t' ? ' ' : cp, C_TEXT, 0);
+                }
+                if (b < note_len && note[b] == '\n' && b >= lo && b < hi) gfx_fill(x + 8 + cx * 8, py, 6, 16, active ? C_ACCENT_LIGHT : 0xE5E7EB);
+            } else {                                          /* Arabic: shaped, right to left, on the right */
+                static struct tcell cells[TEXT_MAX];
+                int rtl, m = text_layout_para(note + a, b - a, cells, TEXT_MAX, &rtl);
+                int x0 = x + 8 + (rtl && m < note_cols ? (note_cols - m) * 8 : 0);
+                for (int k = 0; k < m; k++) {
+                    int at = a + cells[k].at, px = x0 + k * 8;
+                    if (fn && at >= hl_until && match_at(at)) hl_until = at + fn;
+                    if (at >= lo && at < hi) gfx_fill(px, py, 8, 16, selc);
+                    else if (at < hl_until) gfx_fill(px, py, 8, 16, 0xFEF08A);
+                    gfx_cell(px, py, cells[k].cp, C_TEXT, 0);
+                }
+                if (cy == crow) {
+                    rtl_caret = 1;
+                    int cell = text_caret_cell(cells, m, rtl, note_caret - a, b - a);
+                    if (caret_on && active) gfx_fill(x0 + cell * 8 - (cell > 0 ? 1 : 0), py, 2, 16, C_TEXT);
+                }
+            }
         }
-        if (cx >= note_cols) { cx = 0; cy++; }
-        if (fn && i >= hl_until && cy >= first - 1 && match_at(i)) hl_until = i + fn;
-        if (cy >= first && cy < first + note_rows) {
-            int px = x + 8 + cx * 8, py = ty + 4 + (cy - first) * 16;
-            if (in_sel) gfx_fill(px, py, 8, 16, active || find_focus ? C_ACCENT_LIGHT : 0xE5E7EB);
-            else if (i < hl_until) gfx_fill(px, py, 8, 16, 0xFEF08A);
-            gfx_char(px, py, ch == '\t' ? ' ' : ch, C_TEXT, 0);
-        }
-        cx++;
+        cy++;
+        if ((next == b && b >= note_len) || next <= a) break;  /* the end of the text */
+        a = next;
     }
-    if (caret_on && active && crow >= first && crow < first + note_rows)
+    if (caret_on && active && !rtl_caret && crow >= first && crow < first + note_rows)
         gfx_fill(x + 8 + ccol * 8, ty + 4 + (crow - first) * 16, 2, 16, C_TEXT);
     gfx_clip(x, y, w, h);
 
     gfx_fill(x, y + h - 22, w, 22, 0xF3F4F6);
     /* line / column of the caret, counted in real lines (not wrapped rows) */
     int line = 1, col = 1;
-    for (int i = 0; i < note_caret; i++) { if (note[i] == '\n') { line++; col = 1; } else col++; }
+    for (int i = 0; i < note_caret; i++) { if (note[i] == '\n') { line++; col = 1; } else if (!NOTE_CONT(i)) col++; }
     char st[128], *p = cat(st, "  ");
     p = cat(p, note_status); p = cat(p, "   |   Ln "); p = utoa(p, line); p = cat(p, ", Col "); p = utoa(p, col);
     p = cat(p, "   |   ");
-    if (has_sel()) { p = utoa(p, hi - lo); cat(p, " selected"); }
-    else { p = utoa(p, note_len); cat(p, " characters"); }
+    if (has_sel()) { p = utoa(p, utf8_count(note, lo, hi)); cat(p, " selected"); }
+    else { p = utoa(p, utf8_count(note, 0, note_len)); cat(p, " characters"); }
     gfx_text(x + 4, y + h - 19, st, C_MUTED, 0);
     if (kstrlen_(st) * 8 + 16 < w - 104) gfx_text(x + w - 104, y + h - 19, "Ctrl+S save", C_MUTED, 0);
 }
@@ -829,6 +902,18 @@ static int note_pos_from_xy(int lx, int ly) {
     int row = note_top + (ly - tt - 4) / 16, col = (lx - 8 + 4) / 8;
     if (ly < tt + 4) row = note_top - (ly < tt ? 1 : 0);
     if (col < 0) col = 0;
+    int a = note_pos_at(row, 0);
+    if (row >= 0) {                     /* an Arabic row: find the character under the click */
+        int b = note_row_end(a);
+        if (text_has_rtl(note + a, b - a)) {
+            static struct tcell cells[TEXT_MAX];
+            int rtl, m = text_layout_para(note + a, b - a, cells, TEXT_MAX, &rtl);
+            int c = (lx - 8 - (rtl && m < note_cols ? (note_cols - m) * 8 : 0)) / 8;
+            if (lx - 8 < (rtl && m < note_cols ? (note_cols - m) * 8 : 0)) c = -1;
+            if (rtl && c < 0) return b;                        /* left of the text = its end */
+            return a + text_pos_at_cell(cells, m, rtl, c, b - a);
+        }
+    }
     return note_pos_at(row, col);
 }
 
@@ -919,13 +1004,12 @@ static void notepad_key(int k) {
         if (k == '\n') { if (find_focus == 1) note_find(kbd_shift_down() ? -1 : 1); else note_replace_one(); }
         else if (k == KEY_ESC) { find_open = 0; find_focus = 0; }
         else if (k == '\t') { if (find_replace) find_focus = 3 - find_focus; }
-        else if (k == '\b') { if (n) { f[n - 1] = 0; changed = 1; } }
         else if (k == KEY_CTRL('v')) {
             const char *c = clip_text();
             for (int i = 0; i < clip_len() && n < 63 && c[i] >= 32 && c[i] < 127; i++) f[n++] = c[i];
             f[n] = 0; changed = 1;
         }
-        else if (k >= 32 && k < 127 && n < 63) { f[n] = (char)k; f[n + 1] = 0; changed = 1; }
+        else changed = field_key(f, 64, k);
         if (changed && find_focus == 1 && find_text[0])             /* search as you type */
             note_find_from(has_sel() ? sel_lo() : note_caret, 1);
         return;
@@ -934,13 +1018,12 @@ static void notepad_key(int k) {
         int n = 0; while (note_field[n]) n++;
         if (k == '\n') { note_field_focus = 0; note_open_field(); }
         else if (k == KEY_ESC) note_field_focus = 0;
-        else if (k == '\b') { if (n) note_field[n - 1] = 0; }
         else if (k == KEY_CTRL('v')) {
             const char *c = clip_text();
             for (int i = 0; i < clip_len() && n < FS_PATH_MAX - 1 && c[i] >= 32 && c[i] < 127; i++) note_field[n++] = c[i];
             note_field[n] = 0;
         }
-        else if (k >= 32 && k < 127 && n < FS_PATH_MAX - 1) { note_field[n] = (char)k; note_field[n + 1] = 0; }
+        else field_key(note_field, FS_PATH_MAX, k);
         return;
     }
     int row, col; note_rc(note_caret, &row, &col);
@@ -951,8 +1034,8 @@ static void notepad_key(int k) {
     case KEY_CTRL('x'): if (has_sel()) { note_copy(); undo_save(); note_typing = 0; note_delete_sel(); note_set_status("Cut"); } else note_set_status("Select some text first"); return;
     case KEY_CTRL('v'): note_paste(); return;
     case KEY_CTRL('z'): note_undo(); return;
-    case KEY_LEFT:  if (has_sel() && !kbd_shift_down()) note_move(sel_lo(), 0); else note_move(note_caret - 1, 0); return;
-    case KEY_RIGHT: if (has_sel() && !kbd_shift_down()) note_move(sel_hi(), 0); else note_move(note_caret + 1, 0); return;
+    case KEY_LEFT:  if (has_sel() && !kbd_shift_down()) note_move(sel_lo(), 0); else note_move(utf8_prev(note, note_caret), 0); return;
+    case KEY_RIGHT: if (has_sel() && !kbd_shift_down()) note_move(sel_hi(), 0); else note_move(utf8_next(note, note_len, note_caret), 0); return;
     case KEY_UP:    if (row > 0) note_move(note_pos_at(row - 1, note_want_col), 1); else note_move(0, 0); return;
     case KEY_DOWN:  note_move(note_pos_at(row + 1, note_want_col), 1); return;
     case KEY_PGUP:  note_move(note_pos_at(row - note_rows + 1 < 0 ? 0 : row - note_rows + 1, note_want_col), 1); return;
@@ -965,18 +1048,19 @@ static void notepad_key(int k) {
     if (k == '\b' || k == KEY_DEL) {
         undo_save(); note_typing = 0;
         if (note_delete_sel()) return;
-        if (k == '\b' && note_caret > 0) note_delete_range(note_caret - 1, note_caret);
-        else if (k == KEY_DEL && note_caret < note_len) note_delete_range(note_caret, note_caret + 1);
+        if (k == '\b' && note_caret > 0) note_delete_range(utf8_prev(note, note_caret), note_caret);
+        else if (k == KEY_DEL && note_caret < note_len) note_delete_range(note_caret, utf8_next(note, note_len, note_caret));
         else undo_n--, undo_head = (undo_head + UNDO_LEVELS - 1) % UNDO_LEVELS;   /* nothing changed */
         return;
     }
-    if (k == '\t' || k == '\n' || (k >= 32 && k < 127)) {
+    if (k == '\t' || k == '\n' || (k >= 32 && k < 127) || KEY_IS_UNI(k)) {
         int typed = k >= 32;                                 /* " word" typed = one undo step */
         int new_word = k == ' ' && note_caret > 0 && note[note_caret - 1] != ' ';
         if (!note_typing || !typed || new_word || has_sel()) undo_save();
         note_typing = typed;
         note_delete_sel();
         if (k == '\t') note_insert("    ", 4);
+        else if (KEY_IS_UNI(k)) { char u[4]; note_insert(u, utf8_encode(KEY_CP(k), u)); }
         else { char c = (char)k; note_insert(&c, 1); }
     }
 }
@@ -1732,20 +1816,11 @@ static void draw_tiles(int x, int y, int w, int h) {
             /* the name: two lines at most */
             int ny = ty + THUMB_H + 12;
             if (i == ex_sel && ex_renaming) { textbox(tx + 2, ny - 4, TILE_W - 4, ex_rename_buf, 1); continue; }
-            const char *nm = ex_name(i);
-            int len = kstrlen_(nm), per = (TILE_W - 8) / 8, cut = per;
-            if (len > per)                                     /* break the line at a space if there is one */
-                for (int k = per; k > 2; k--) if (nm[k] == ' ') { cut = k; break; }
-            char l1[20], l2[20];
-            kcpy(l1, nm, cut + 1);
-            if (len > cut) {
-                const char *rest = nm + cut + (nm[cut] == ' ');
-                kcpy(l2, rest, per + 1);
-                if (kstrlen_(rest) > per) { l2[per - 2] = '.'; l2[per - 1] = '.'; l2[per] = 0; }
-            } else l2[0] = 0;
+            char l1[64], l2[64];
+            two_lines(ex_name(i), (TILE_W - 8) / 8, l1, l2);
             uint32_t col = is_cut ? C_MUTED : C_TEXT;
-            gfx_text(tx + (TILE_W - kstrlen_(l1) * 8) / 2, ny, l1, col, 0);
-            if (l2[0]) gfx_text(tx + (TILE_W - kstrlen_(l2) * 8) / 2, ny + 16, l2, col, 0);
+            gfx_text(tx + (TILE_W - text_cells(l1) * 8) / 2, ny, l1, col, 0);
+            if (l2[0]) gfx_text(tx + (TILE_W - text_cells(l2) * 8) / 2, ny + 16, l2, col, 0);
         }
     gfx_clip(x, y, w, h);
     if (total_rows > rows) {                                   /* scroll indicator */
@@ -2020,10 +2095,8 @@ static void explorer_key(int k) {
         int n = 0; while (ex_rename_buf[n]) n++;
         if (k == '\n') ex_rename_commit();
         else if (k == KEY_ESC) ex_renaming = 0;
-        else if (k == '\b') { if (n) ex_rename_buf[n - 1] = 0; }
-        else if (k >= 32 && k < 127 && n < FS_NAME_MAX - 1 && k != '/' && k != '\\' && k != ':' && k != '*' && k != '?' && k != '"' && k != '<' && k != '>' && k != '|') {
-            ex_rename_buf[n] = (char)k; ex_rename_buf[n + 1] = 0;
-        }
+        else if (k != '/' && k != '\\' && k != ':' && k != '*' && k != '?' && k != '"' && k != '<' && k != '>' && k != '|') field_key(ex_rename_buf, FS_NAME_MAX, k);
+        (void)n;
         return;
     }
     int step = 1, before = ex_sel, moved = 1;
@@ -2679,7 +2752,7 @@ static void draw_taskbar(void) {
     for (int a = 0; a < NWIN; a++) {
         if (!find(a) || !on_desk(a)) continue;
         int bx, bw; taskbar_button_rect(slot, &bx, &bw);
-        if (bx + bw > gfx_w - 140) break;                     /* no more room */
+        if (bx + bw > gfx_w - 180) break;                     /* no more room */
         int active = focused() == a;
         if (active || hover_key == 200 + a) gfx_rfill(bx, y + 4, bw, TASKBAR_H - 8, 6, C_TASK_HI);
         icon(a, bx + 8, y + 12, 20);
@@ -2690,6 +2763,11 @@ static void draw_taskbar(void) {
         slot++;
     }
     draw_bell(y);
+    /* keyboard language: EN or Arabic (click, Alt+Shift or Win+Space to switch) */
+    int lx = gfx_w - 176;
+    if (hover_key == 107) gfx_rfill(lx, y + 4, 36, TASKBAR_H - 8, 6, C_TASK_HI);
+    if (kbd_layout()) gfx_text(lx + 14, y + 14, "\xD8\xB9", C_WHITE, 1);   /* ain, for Arabic */
+    else gfx_text(lx + 10, y + 14, "EN", C_WHITE, 1);
     /* clock and date (click: Calendar) */
     if (hover_key == 101) gfx_rfill(gfx_w - 94, y + 4, 90, TASKBAR_H - 8, 6, C_TASK_HI);
     int hh, mm, ss, d, mo, yr; rtc_time(&hh, &mm, &ss); rtc_date(&d, &mo, &yr);
@@ -2837,8 +2915,7 @@ static void search_open(int i) {
 }
 static int start_key(int k) {                                  /* keys while Start is open; 1 = used */
     int n = kstrlen_(sq);
-    if (k >= 32 && k < 127) { if (n < 30) { sq[n] = (char)k; sq[n + 1] = 0; search_run(); } dirty = 1; return 1; }
-    if (k == '\b') { if (n) { sq[n - 1] = 0; search_run(); } dirty = 1; return 1; }
+    if ((k >= 32 && k < 127) || KEY_IS_UNI(k) || k == '\b') { if (field_key(sq, 31, k)) search_run(); dirty = 1; return 1; }
     if (k == KEY_ESC) { if (n) { sq[0] = 0; sres_n = 0; } else start_close(); dirty = 1; return 1; }
     if (k == KEY_DOWN && sq[0]) { if (sres_sel < sres_n - 1) sres_sel++; dirty = 1; return 1; }
     if (k == KEY_UP && sq[0]) { if (sres_sel > 0) sres_sel--; dirty = 1; return 1; }
@@ -3177,16 +3254,10 @@ static void shadow_text(int x, int y, const char *t) {
     gfx_text(x + 1, y + 1, t, 0x000000, 0); gfx_text(x, y, t, C_WHITE, 0);
 }
 static void desk_label(int x, int y, const char *name) {      /* up to two centred lines of 10 */
-    int len = kstrlen_(name), cut = len > 10 ? 10 : len;
-    if (len > 10) for (int k = 10; k > 0; k--) if (name[k] == ' ') { cut = k; break; }   /* break at a space */
-    char l1[12], l2[12]; kcpy(l1, name, cut + 1);
-    shadow_text(x + 40 - kstrlen_(l1) * 4, y + 4, l1);
-    if (len > cut) {
-        const char *r = name + cut + (name[cut] == ' ');
-        int rl = kstrlen_(r);
-        if (rl > 10) { kcpy(l2, r, 9); l2[8] = '.'; l2[9] = '.'; l2[10] = 0; } else kcpy(l2, r, 11);
-        shadow_text(x + 40 - kstrlen_(l2) * 4, y + 18, l2);
-    }
+    char l1[40], l2[40];
+    two_lines(name, 10, l1, l2);
+    shadow_text(x + 40 - text_cells(l1) * 4, y + 4, l1);
+    if (l2[0]) shadow_text(x + 40 - text_cells(l2) * 4, y + 18, l2);
 }
 
 /* the bin: a grey can, with crumpled paper on top when something is inside */
@@ -3693,7 +3764,8 @@ static int compute_hover(void) {
         if (mx < 108) return 100;
         if (mx >= 110 && mx < 150) return 106;                  /* Task View */
         if (mx >= gfx_w - 96) return 101;
-        if (mx >= bell_x() && mx < bell_x() + 36) return 102;   /* notifications */                      /* the clock: opens Calendar */
+        if (mx >= bell_x() && mx < bell_x() + 36) return 102;
+        if (mx >= gfx_w - 176 && mx < gfx_w - 140) return 107;  /* keyboard language */   /* notifications */                      /* the clock: opens Calendar */
         int slot = 0;
         for (int a = 0; a < NWIN; a++) {
             if (!find(a) || !on_desk(a)) continue;
@@ -3752,6 +3824,7 @@ static void left_click(void) {
         if (hover_key == 105) return;
         if (hover_key != 102) { center_open = 0; dirty = 1; }
     }
+    if (hover_key == 107) { kbd_toggle_layout(); dirty = 1; return; }   /* keyboard language */
     if (hover_key == 102) {                                    /* the bell */
         center_open = !center_open; unread = 0; toast_on = 0; start_close(); dirty = 1; return;
     }
@@ -3961,6 +4034,7 @@ void wm_key(int k) {
     if (locked) { lock_key(k); return; }
     if (k == KEY_LOCK) { wm_lock(); return; }
     if (k == KEY_PRTSC) { wm_screenshot(); return; }
+    if (k == KEY_LAYOUT) { dirty = 1; return; }                /* the keyboard language changed: redraw EN / Arabic */
     if (k == KEY_WIN_E) { start_close(); open_app(APP_EXPLORER); return; }
     if (k == KEY_WIN_D) { start_close(); show_desktop(); return; }
     if (k == KEY_TASKVIEW) { taskview = !taskview; tv_sel = cur_desk; start_close(); dirty = 1; return; }
@@ -4022,7 +4096,7 @@ void wm_key(int k) {
         if (k == KEY_CTRL('v')) {                             /* paste: the first line of the clipboard */
             const char *c = clip_text();
             for (int i = 0; i < clip_len() && c[i] != '\n' && c[i] != '\r'; i++) con_key(c[i] == '\t' ? ' ' : (uint8_t)c[i]);
-        } else con_key(k);
+        } else if (!KEY_IS_UNI(k)) con_key(k);              /* the Terminal is ASCII only */
         dirty = 1; break;
     case APP_NOTEPAD:  notepad_key(k); dirty = 1; break;
     case APP_EXPLORER: explorer_key(k); dirty = 1; break;

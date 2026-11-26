@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include "kernel.h"
 #include "theme.h"
+#include "text.h"
 #include "font.h"
 
 static uint32_t *fb;            /* the real screen */
@@ -196,8 +197,32 @@ void gfx_char(int x, int y, char ch, uint32_t c, int bold) {
     }
 }
 
+/* one 8x16 cell of laid-out text (text.c): ASCII from the font, Arabic from arabic_font.h */
+void gfx_cell(int x, int y, int cp, uint32_t c, int bold) {
+    if (cp < 128) { gfx_char(x, y, (char)cp, c, bold); return; }
+    const unsigned char *g = text_arabic_glyph(cp, bold);
+    if (!g) { gfx_rect(x + 1, y + 3, 6, 10, c); return; }       /* a character the font doesn't have */
+    for (int j = 0; j < 16; j++) {
+        uint8_t row = g[j];
+        if (!row) continue;
+        for (int i = 0; i < 8; i++) if (row & (0x80 >> i)) gfx_pixel(x + i, y + j, c);
+    }
+}
 void gfx_text(int x, int y, const char *s, uint32_t c, int bold) {
-    for (; *s; s++, x += 8) gfx_char(x, y, *s, c, bold);
+    int n = 0, wide = 0;
+    for (; s[n]; n++) if ((uint8_t)s[n] >= 0x80) wide = 1;
+    if (!wide) { for (; *s; s++, x += 8) gfx_char(x, y, *s, c, bold); return; }
+    static struct tcell cells[TEXT_MAX];                         /* UTF-8: shape and order it first */
+    int rtl, m = text_layout(s, n, cells, TEXT_MAX, &rtl);
+    for (int k = 0; k < m; k++) gfx_cell(x + k * 8, y, cells[k].cp, c, bold);
+}
+/* right-to-left paragraphs line up on the right: x..x+w */
+void gfx_text_para(int x, int y, int w, const char *s, uint32_t c, int bold) {
+    int n = 0; while (s[n]) n++;
+    static struct tcell cells[TEXT_MAX];
+    int rtl, m = text_layout_para(s, n, cells, TEXT_MAX, &rtl);
+    int x0 = rtl ? x + w - m * 8 : x;
+    for (int k = 0; k < m; k++) gfx_cell(x0 + k * 8, y, cells[k].cp, c, bold);
 }
 
 /* Same text drawn at 2x size (used for big headings). */

@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.9 (stage 29: virtual desktops). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
+Version 3.0 (stage 30: Arabic and right-to-left text). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -131,6 +131,15 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Arabic** (3.0): switch the keyboard with **Alt+Shift**, **Win+Space** or the EN / ع
+  button on the taskbar, then type Arabic (the Arabic 101 layout of Windows: the B key
+  types لا, Shift+H أ, Shift+Y إ, Shift+N آ, Shift+/ ؟). Letters join the way Arabic is
+  written (each takes its first / middle / last / alone form; lam + alef become one sign),
+  and a line that starts in Arabic runs right to left and lines up on the right, with
+  English words or numbers inside it kept in their own order. Works in Notepad, Notes,
+  Contacts, every text box and in file names: an Arabic name is saved on the FAT32 drive
+  as a long (Unicode) name, so Windows reads it too. Files are UTF-8. The letters come
+  from the DejaVu Sans font, shrunk to MyOS's 8x16 cells (`tools_mkarabic.py`)
 - **Virtual desktops** (up to 4): the Task View button next to Start (or **Win+Tab**)
   shows each desktop with its windows - click one to go there, + for a new one, x to
   close one (its windows move to the desktop next to it). **Win+Ctrl+Left / Right**
@@ -302,5 +311,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 27. ✅ Compared with Windows / macOS / Ubuntu (docs/COMPARISON.md): Start search, notifications, reminders, screenshots, lock screen, Win+E / Win+D
 28. ✅ Dark mode (theme.h colour mapping in gfx.c and the toolkit; Settings switch, `theme` command; system call 44 `theme()`)
 29. ✅ Virtual desktops (Task View, Win+Tab, Win+Ctrl+Left/Right/D/F4, Move to desktop)
-30. Arabic / right-to-left, HTTPS (TLS)
-31. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+30. ✅ Arabic: keyboard layout, joined letters, right-to-left lines, UTF-8 text and Unicode file names (text.c)
+31. HTTPS (TLS)
+32. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

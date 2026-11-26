@@ -87,6 +87,10 @@ void kfree(void *p);
 #define KEY_DESK_PREV  0x118          /* Win+Ctrl+Left */
 #define KEY_DESK_NEW   0x119          /* Win+Ctrl+D */
 #define KEY_DESK_CLOSE 0x11A          /* Win+Ctrl+F4 */
+#define KEY_LAYOUT     0x11B          /* Alt+Shift / Win+Space: the keyboard language changed */
+#define KEY_UNI(cp)    (0x10000 | (cp))   /* a typed character beyond ASCII (Arabic) */
+#define KEY_IS_UNI(k)  ((k) & 0x10000)
+#define KEY_CP(k)      ((k) & 0xFFFF)
 #define KEY_CTRL(c) (0x200 | (c))           /* Ctrl + letter, e.g. KEY_CTRL('s') */
 
 /* kernel.c */
@@ -137,6 +141,8 @@ void wm_notify(const char *title, const char *text, const char *path);
 void wm_lock(void);
 void wm_screenshot(void);
 extern int gfx_theme;                    /* 1 = draw in dark mode colours (theme.h) */
+void gfx_text_para(int x, int y, int w, const char *s, uint32_t c, int bold);
+void gfx_cell(int x, int y, int cp, uint32_t c, int bold);   /* one character cell (ASCII or Arabic) */
 void gfx_text_scaled(int x, int y, const char *s, uint32_t c, int scale);
 const uint32_t *gfx_backbuffer(void);
 /* png_write.c */
@@ -234,7 +240,9 @@ int net_job_start(int kind, const char *host);      /* 1 = ping, 2 = nslookup */
 void net_job_tick(void);
 void net_job_cancel(void);
 int kbd_shift_down(void);
-int kbd_ctrl_down(void);                          /* kernel.c: is Ctrl held right now? */
+int kbd_ctrl_down(void);
+int kbd_layout(void);              /* 1 = Arabic keyboard */
+int kbd_toggle_layout(void);                          /* kernel.c: is Ctrl held right now? */
 void wm_max_client(int *w, int *h);              /* wm.c: the biggest client area a window can have */
 int proc_set_size(int slot, int w, int h);       /* proc.c: the user resized a program window */
 int wm_set_wallpaper(const char *path);          /* wm.c: picture file -> desktop background */                         /* kernel.c: is Shift held right now? */

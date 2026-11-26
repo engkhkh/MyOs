@@ -63,7 +63,7 @@ class VM:
     KEYMAP = {'"': 'shift-apostrophe', ' ': 'spc', '.': 'dot', '\\': 'backslash', '/': 'slash', '-': 'minus',
               ':': 'shift-semicolon', '\n': 'ret', '(': 'shift-9', ')': 'shift-0', '!': 'shift-1', '_': 'shift-minus',
               '=': 'equal', '*': 'shift-8', '+': 'shift-equal', '%': 'shift-5', ',': 'comma', "'": 'apostrophe',
-              '\t': 'tab', '@': 'shift-2'}
+              '\t': 'tab', '@': 'shift-2', ';': 'semicolon'}
     def type(self, text, settle=0.3):
         for ch in text:
             k = self.KEYMAP.get(ch) or ('shift-' + ch.lower() if ch.isupper() else ch)
@@ -283,6 +283,7 @@ def boot1():
     v27_tests(vm)
     dark_tests(vm)
     desktops_tests(vm)
+    arabic_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -529,6 +530,38 @@ def desktops_tests(vm):
     focus_terminal(vm)
     check('desktops', 'back to one desktop with the Terminal', front_rect(vm) == term, front_rect(vm))
 
+def arabic_tests(vm):
+    """v3.0: Arabic letters, right-to-left text, the keyboard language, Arabic file names"""
+    focus_terminal(vm)
+    vm.cmd('notepad /arabic.txt', 1.5)
+    en = np.asarray(vm.shot('_en', '', (700, 720, 1024, 768))).astype(int); shots.pop(); os.remove(OUT + '/_en.png')
+    vm.key('meta_l-spc'); time.sleep(0.6)
+    ar = np.asarray(vm.shot('120_layout', 'v3.0 Win+Space (or Alt+Shift, or a click) switches the keyboard to Arabic: the taskbar shows ع', (700, 720, 1024, 768))).astype(int)
+    check('arabic', 'the taskbar shows the keyboard language (EN -> Arabic)', np.abs(en[:, 148:184] - ar[:, 148:184]).sum() > 1000, '')
+    vm.type('lvpfh fhguhgl\nsbl ', 0.5)                     # Arabic 101 keys: مرحبا بالعالم / سلام
+    vm.key('meta_l-spc'); time.sleep(0.4)
+    vm.type('MyOS 3.0', 0.3); vm.key('ctrl-s'); time.sleep(1)
+    x, y, w = front_rect(vm)
+    im = np.asarray(vm.shot('121_notepad_arabic', 'v3.0 Notepad: Arabic is joined (shaped) and runs right to left, lined up on the right; English inside it keeps its order')).astype(int)
+    row = im[y + 72:y + 92]
+    dark = lambda a: ((a.sum(-1) < 200).sum())
+    check('arabic', 'Arabic lines line up on the right in Notepad', dark(row[:, x + w - 120:x + w - 8]) > 60 and dark(row[:, x + 10:x + 300]) == 0,
+          (dark(row[:, x + w - 120:x + w - 8]), dark(row[:, x + 10:x + 300])))
+    vm.key('alt-f4'); time.sleep(0.5)
+    vm.cmd('explorer', 1.5); vm.type('arab', 0.5)
+    vm.key('f2'); time.sleep(0.3); vm.key(*['backspace'] * 10, gap=0.05)
+    vm.key('meta_l-spc'); time.sleep(0.3); vm.type('lvpfh', 0.3)
+    vm.key('meta_l-spc'); time.sleep(0.3); vm.type('.txt\n', 1)
+    vm.shot('122_explorer_arabic', 'v3.0 an Arabic file name: renamed in Explorer, kept on the FAT32 drive as a long (Unicode) name')
+    vm.key('alt-f4'); time.sleep(0.5)
+    focus_terminal(vm)
+    vm.cmd('notes', 3); vm.key('ctrl-n'); time.sleep(0.4)
+    vm.key('meta_l-spc'); time.sleep(0.3)
+    vm.type('sbl ugd;l\nlvpfh f;\n', 1)                   # سلام عليكم / مرحبا بك
+    vm.key('meta_l-spc'); time.sleep(0.3); vm.type('Notes 3.0', 2.5)
+    vm.shot('123_notes_arabic', 'v3.0 Notes (a program using the toolkit): an Arabic note, its title in the list, saved as an Arabic file name')
+    vm.key('alt-f4'); time.sleep(0.5)
+
 def dark_tests(vm):
     """v2.8: dark mode"""
     focus_terminal(vm)
@@ -748,6 +781,11 @@ def boot1_disk():
     check('settings', 'tz and volume saved', 'timezone=3' in ini.replace('+', '') or 'timezone=180' in ini, '')
     check('settings', 'explorer_view saved', 'explorer_view=1' in ini)
     check('dark', 'the dark mode choice is saved in settings.ini', 'dark=0' in ini, '')
+    a = mtype('/مرحبا.txt') or ''
+    check('arabic', 'an Arabic file name on the disk (UTF-16 long name), its text saved as UTF-8',
+          a.startswith('مرحبا بالعالم\nسلام MyOS 3.0') and not mexists('/arabic.txt'), repr(a[:40]))
+    names = mtools('mdir', '-b', '-i', OUT + '/part.img', '::/Notes')
+    check('arabic', 'Notes saved the Arabic note as "سلام عليكم.txt"', 'سلام عليكم.txt' in names, names.replace('\n', ' '))
     if True:                                                     # (boot 1)
         check('lock', 'the password is kept only as a hash', 'password=' + lock_hash('secret') in ini and 'secret' not in ini, ini)
         shots = [l for l in mtools('mdir', '-b', '-i', OUT + '/part.img', '::/Pictures/Screenshots').splitlines() if l.lower().endswith('.png')]

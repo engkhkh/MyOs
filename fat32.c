@@ -124,7 +124,7 @@ static int dir_walk(uint32_t dclus, dir_cb cb, void *ctx) {
     uint8_t *buf = kmalloc(cluster_bytes);
     if (!buf) return 0;
     struct dinfo d;
-    char lfn[MAX_LFN_SLOTS * 13 + 1];
+    uint16_t lfn[MAX_LFN_SLOTS * 13 + 1];                     /* long names are UTF-16 on disk */
     int have_lfn = 0, result = 0;
     d.nlfn = 0;
     for (uint32_t c = dclus; c >= 2 && c < EOC; c = fat_get(c)) {
@@ -141,7 +141,7 @@ static int dir_walk(uint32_t dclus, dir_cb cb, void *ctx) {
                 static const int pos[13] = { 1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30 };
                 for (int k = 0; k < 13; k++) {
                     uint16_t ch = rd16(e + pos[k]);
-                    lfn[(ord - 1) * 13 + k] = (ch == 0 || ch == 0xFFFF) ? 0 : (ch < 128 ? (char)ch : '?');
+                    lfn[(ord - 1) * 13 + k] = (ch == 0xFFFF) ? 0 : ch;
                 }
                 d.lfn_lba[d.nlfn] = lba; d.lfn_off[d.nlfn] = off; d.nlfn++;
                 continue;
@@ -149,7 +149,16 @@ static int dir_walk(uint32_t dclus, dir_cb cb, void *ctx) {
             if (e[11] & ATTR_VOL) { have_lfn = 0; d.nlfn = 0; continue; }
             mcopy(d.raw, e, 32);
             d.lba = lba; d.off = off;
-            if (have_lfn && lfn[0]) { int k = 0; for (; k < FS_NAME_MAX - 1 && lfn[k]; k++) d.name[k] = lfn[k]; d.name[k] = 0; }
+            if (have_lfn && lfn[0]) {                             /* UTF-16 -> UTF-8 (MyOS text is UTF-8) */
+                int k = 0;
+                for (int q = 0; lfn[q] && k < FS_NAME_MAX - 4; q++) {
+                    uint16_t ch = lfn[q];
+                    if (ch < 0x80) d.name[k++] = (char)ch;
+                    else if (ch < 0x800) { d.name[k++] = (char)(0xC0 | ch >> 6); d.name[k++] = (char)(0x80 | (ch & 63)); }
+                    else { d.name[k++] = (char)(0xE0 | ch >> 12); d.name[k++] = (char)(0x80 | (ch >> 6 & 63)); d.name[k++] = (char)(0x80 | (ch & 63)); }
+                }
+                d.name[k] = 0;
+            }
             else { short_to_name(e, d.name); d.nlfn = 0; }
             if (cb(&d, ctx)) { result = 1; goto done; }
             have_lfn = 0; d.nlfn = 0;
@@ -332,7 +341,17 @@ static int create_entry(uint32_t dclus, const char *name, uint8_t attr, uint32_t
     uint8_t sn[11];
     int lfn = !is_plain_83(name, sn);
     if (lfn) make_short(dclus, name, sn);
-    int len = 0; while (name[len]) len++;
+    uint16_t u[MAX_LFN_SLOTS * 13 + 1];                       /* the name as UTF-16 (from UTF-8) */
+    int len = 0;
+    for (int i = 0; name[i] && len < MAX_LFN_SLOTS * 13; ) {
+        uint8_t c = (uint8_t)name[i];
+        uint16_t cp;
+        if (c < 0x80) { cp = c; i++; }
+        else if ((c & 0xE0) == 0xC0 && name[i + 1]) { cp = (uint16_t)((c & 31) << 6 | (name[i + 1] & 63)); i += 2; }
+        else if ((c & 0xF0) == 0xE0 && name[i + 1] && name[i + 2]) { cp = (uint16_t)((c & 15) << 12 | (name[i + 1] & 63) << 6 | (name[i + 2] & 63)); i += 3; }
+        else { cp = '_'; i++; }
+        u[len++] = cp;
+    }
     int nl = lfn ? (len + 12) / 13 : 0;
     if (nl + 1 > MAX_LFN_SLOTS) return 0;
     uint32_t lbas[MAX_LFN_SLOTS + 1], offs[MAX_LFN_SLOTS + 1];
@@ -348,7 +367,7 @@ static int create_entry(uint32_t dclus, const char *name, uint8_t attr, uint32_t
         e[11] = ATTR_LFN; e[13] = sum;
         for (int k = 0; k < 13; k++) {
             int ci = (ord - 1) * 13 + k;
-            uint16_t ch = ci < len ? (uint8_t)name[ci] : (ci == len ? 0 : 0xFFFF);
+            uint16_t ch = ci < len ? u[ci] : (ci == len ? 0 : 0xFFFF);
             wr16(e + pos[k], ch);
         }
         if (!write_raw(lbas[s], offs[s], e)) return 0;

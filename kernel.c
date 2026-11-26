@@ -53,6 +53,22 @@ static const char keymap_shift[128] = {
 };
 static int shift, caps, ctrl, alt, extended;
 static int win, win_combo;
+/* Arabic (101) keyboard: the letter on each key. Alt+Shift or Win+Space switches. */
+static int layout_ar, kbd_pending;
+static const unsigned short ar_keys[128] = {
+    [0x10]=0x636,[0x11]=0x635,[0x12]=0x62B,[0x13]=0x642,[0x14]=0x641,[0x15]=0x63A,[0x16]=0x639,[0x17]=0x647,
+    [0x18]=0x62E,[0x19]=0x62D,[0x1A]=0x62C,[0x1B]=0x62F,
+    [0x1E]=0x634,[0x1F]=0x633,[0x20]=0x64A,[0x21]=0x628,[0x22]=0x644,[0x23]=0x627,[0x24]=0x62A,[0x25]=0x646,
+    [0x26]=0x645,[0x27]=0x643,[0x28]=0x637,[0x29]=0x630,
+    [0x2C]=0x626,[0x2D]=0x621,[0x2E]=0x624,[0x2F]=0x631,[0x30]=0xFEFB,[0x31]=0x649,[0x32]=0x629,[0x33]=0x648,
+    [0x34]=0x632,[0x35]=0x638,
+};
+static const unsigned short ar_keys_shift[128] = {
+    [0x23]=0x623,[0x15]=0x625,[0x31]=0x622,[0x22]=0xFEF7,[0x14]=0xFEF9,[0x30]=0xFEF5,
+    [0x25]=0x60C,[0x35]=0x61F,[0x27]=0x61B,
+};
+int kbd_layout(void) { return layout_ar; }
+int kbd_toggle_layout(void) { layout_ar = !layout_ar; return layout_ar; }
 int kbd_shift_down(void) { return shift; }
 int kbd_ctrl_down(void) { return ctrl; }
 
@@ -61,10 +77,10 @@ static int decode(uint8_t sc) {
     int ext = extended; extended = 0;
     if (sc == 0x1D) { ctrl = 1; return -1; }
     if (sc == 0x9D) { ctrl = 0; return -1; }
-    if (sc == 0x38) { alt = 1; return -1; }                    /* Alt (left or right) */
+    if (sc == 0x38) { alt = 1; if (shift) { layout_ar = !layout_ar; return KEY_LAYOUT; } return -1; }   /* Alt (Shift+Alt: language) */
     if (sc == 0xB8) { alt = 0; return -1; }
     if (ext && (sc == 0x2A || sc == 0xAA)) return -1;          /* the "fake shift" around Print Screen */
-    if (sc == 0x2A || sc == 0x36) { shift = 1; return -1; }
+    if (sc == 0x2A || sc == 0x36) { int was = shift; shift = 1; if (alt && !was && !ctrl) { layout_ar = !layout_ar; return KEY_LAYOUT; } return -1; }
     if (sc == 0xAA || sc == 0xB6) { shift = 0; return -1; }
     /* The Windows key: alone it opens Start (when let go); held with L / E / D it is a shortcut */
     if (ext && (sc == 0x5B || sc == 0x5C)) { win = 1; win_combo = 0; return -1; }
@@ -73,6 +89,7 @@ static int decode(uint8_t sc) {
     if (win) {
         win_combo = 1;
         if (sc == 0x0F) return KEY_TASKVIEW;                   /* Win+Tab: Task View */
+        if (sc == 0x39) { layout_ar = !layout_ar; return KEY_LAYOUT; }   /* Win+Space: keyboard language */
         if (ctrl && ext && sc == 0x4D) return KEY_DESK_NEXT;   /* Win+Ctrl+Right / Left: next / previous desktop */
         if (ctrl && ext && sc == 0x4B) return KEY_DESK_PREV;
         if (ctrl && sc == 0x20) return KEY_DESK_NEW;           /* Win+Ctrl+D: a new desktop */
@@ -107,6 +124,16 @@ static int decode(uint8_t sc) {
     if (sc == 0x01) return KEY_ESC;
     if (sc == 0x53) return KEY_DEL;
     char c = shift ? keymap_shift[sc] : keymap[sc];
+    if (layout_ar && !ctrl && !alt) {                          /* Arabic letters */
+        int cp = shift ? ar_keys_shift[sc] : ar_keys[sc];
+        if (cp >= 0xFEF5) {                                    /* the lam-alef key types two letters */
+            int alef = cp == 0xFEF5 ? 0x622 : cp == 0xFEF7 ? 0x623 : cp == 0xFEF9 ? 0x625 : 0x627;
+            kbd_pending = KEY_UNI(alef);
+            return KEY_UNI(0x644);
+        }
+        if (cp) return KEY_UNI(cp);
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return -1;
+    }
     if (ctrl && c >= 'a' && c <= 'z') return KEY_CTRL(c);
     if (ctrl && c >= 'A' && c <= 'Z') return KEY_CTRL(c + 32);
     if (caps && c >= 'a' && c <= 'z') c -= 32;
@@ -200,7 +227,8 @@ void kernel_main(uint32_t magic, struct mb_info *mbi) {
         while ((sc = kb_read_scancode()) >= 0) {
             int k = decode((uint8_t)sc);
             if (k < 0) continue;
-            if (gui) wm_key(k); else con_key(k);
+            if (gui) wm_key(k); else if (k < 0x10000) con_key(k);
+            if (kbd_pending) { k = kbd_pending; kbd_pending = 0; if (gui) wm_key(k); }
         }
         if (gui) {
             struct mouse_event e;

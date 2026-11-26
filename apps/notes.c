@@ -6,6 +6,7 @@
  * you stop typing (and when you switch notes). Ctrl+N new note, Ctrl+F search,
  * Ctrl+S save now. */
 #include "ui.h"
+#include "../text.h"
 
 #define DIR "/Notes"
 #define MAXN 100
@@ -35,10 +36,17 @@ static int contains(const char *hay, const char *needle) {     /* case-insensiti
     }
     return 0;
 }
+static int whole_chars(const char *s, int k) {               /* drop a UTF-8 character cut in half at the end */
+    if (!k) return 0;
+    int p = utf8_prev(s, k), c = (unsigned char)s[p];
+    int len = c < 0x80 ? 1 : c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : 2;
+    return p + len > k ? p : k;
+}
 static void title_of(const char *text, char *out, int max) {  /* the first non-empty line */
     while (*text == '\n' || *text == ' ') text++;
     int k = 0;
     while (text[k] && text[k] != '\n' && k < max - 1) { out[k] = text[k]; k++; }
+    k = whole_chars(out, k);
     while (k > 0 && out[k - 1] == ' ') k--;
     out[k] = 0;
     if (!k) { const char *u = "Untitled"; while (*u && k < max - 1) out[k++] = *u++; out[k] = 0; }
@@ -51,6 +59,7 @@ static void preview_of(const char *text, char *out, int max) { /* the text after
         char c = *text == '\n' ? ' ' : *text;
         if (c == ' ') { if (k && !sp) out[k++] = ' '; sp = 1; } else { out[k++] = c; sp = 0; }
     }
+    k = whole_chars(out, k);
     out[k] = 0;
 }
 static void path_of(const char *file, char *out) {
@@ -189,7 +198,7 @@ static void draw_list(void) {
         if (ui.pressed && ui_hit(LIST_W - 12, ly, 12, bh)) list_scroll += ui.my < ty ? -rows : rows;
     }
 }
-static int words(const char *s) { int n = 0, in = 0; for (; *s; s++) { int w = *s > ' '; if (w && !in) n++; in = w; } return n; }
+static int words(const char *s) { int n = 0, in = 0; for (; *s; s++) { int w = (unsigned char)*s > ' '; if (w && !in) n++; in = w; } return n; }
 static void draw_editor(void) {
     int x = LIST_W, w = W - LIST_W;
     ui_fill(x, UI_MENU_H, w, H - UI_MENU_H - STATUS_H, UI_WHITE);
@@ -218,7 +227,7 @@ static void draw_status(void) {
         const char *m = notes[cur].dirty ? "Editing...   " : "Saved   "; while (*m) s[k++] = *m++;
         m = utoa(words(notes[cur].text), num); while (*m) s[k++] = *m++;
         m = " words, "; while (*m) s[k++] = *m++;
-        m = utoa(strlen(notes[cur].text), num); while (*m) s[k++] = *m++;
+        m = utoa(utf8_count(notes[cur].text, 0, strlen(notes[cur].text)), num); while (*m) s[k++] = *m++;
         m = " characters"; while (*m) s[k++] = *m++;
     }
     s[k] = 0;
@@ -261,7 +270,7 @@ int main(void) {
                 if (r == 0) delete_current();
                 if (r >= 0) ask_delete = 0;
             } else if (show_about) {
-                if (ui_dialog("About Notes", "Notes for MyOS 2.9", "Each note is a .txt file in C:\\Notes.", "OK", 0) >= 0) show_about = 0;
+                if (ui_dialog("About Notes", "Notes for MyOS 3.0", "Each note is a .txt file in C:\\Notes.", "OK", 0) >= 0) show_about = 0;
             }
         }
         /* save a moment after the typing stops */

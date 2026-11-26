@@ -2,7 +2,7 @@
 CFLAGS = -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -mgeneral-regs-only -O2 -Wall -Wextra
 LDFLAGS = -m elf_i386 -T linker.ld
 
-OBJS = boot.o interrupts.o kernel.o idt.o mm.o gfx.o mouse.o shell.o wm.o ata.o fat32.o proc.o sound.o e1000.o net.o settings.o image.o jpeg.o png_write.o
+OBJS = boot.o interrupts.o kernel.o idt.o mm.o gfx.o mouse.o shell.o wm.o ata.o fat32.o proc.o sound.o e1000.o net.o settings.o image.o jpeg.o png_write.o text.o
 
 APPS = apps/hello.elf apps/bounce.elf apps/spin.elf apps/guess.elf apps/crash.elf apps/paint.elf apps/snake.elf apps/mines.elf apps/music.elf apps/viewer.elf apps/web.elf apps/calc.elf apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/notes.elf apps/contacts.elf apps/calendar.elf apps/widgets.elf
 UCFLAGS = -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -fno-builtin -mgeneral-regs-only -O2 -Wall -Wextra
@@ -25,11 +25,14 @@ apps/image.o: image.c image.h
 	gcc $(UCFLAGS) -c $< -o $@
 apps/jpeg.o: jpeg.c image.h
 	gcc $(UCFLAGS) -c $< -o $@
+# UTF-8 / Arabic text (text.c) too
+apps/text.o: text.c text.h arabic_font.h
+	gcc $(UCFLAGS) -c $< -o $@
 
 # programs that use the widget toolkit (apps/ui.c)
 UI_APPS = apps/solitaire.elf apps/freecell.elf apps/spider.elf apps/notes.elf apps/contacts.elf apps/calendar.elf apps/widgets.elf apps/viewer.elf apps/web.elf
-$(UI_APPS): apps/%.elf: apps/crt0.o apps/malloc.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/%.o apps/user.ld
-	ld -m elf_i386 --no-warn-rwx-segments -T apps/user.ld -o $@ apps/crt0.o apps/$*.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/malloc.o
+$(UI_APPS): apps/%.elf: apps/crt0.o apps/malloc.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/text.o apps/%.o apps/user.ld
+	ld -m elf_i386 --no-warn-rwx-segments -T apps/user.ld -o $@ apps/crt0.o apps/$*.o apps/ui.o apps/cards.o apps/image.o apps/jpeg.o apps/text.o apps/malloc.o
 
 apps/%.elf: apps/crt0.o apps/malloc.o apps/%.o apps/user.ld
 	ld -m elf_i386 --no-warn-rwx-segments -T apps/user.ld -o $@ apps/crt0.o apps/$*.o apps/malloc.o
