@@ -23,7 +23,7 @@ there, what is simpler, and what to build next.
 | Window management | Snap layouts, virtual desktops, Task View | Spaces, Mission Control | Workspaces, overview | Move, resize, maximise, snap halves, Alt+Tab, **Win+D (new)**; no virtual desktops |
 | File manager | Explorer: tabs, search, previews | Finder | Files (Nautilus) | Explorer: icons/list, previews, multi-select, drag and drop, Recycle Bin, right-click menus, Properties |
 | Desktop icons | Yes | Yes | Extension | Yes, files in C:\Desktop, movable |
-| Dark mode / themes | Yes | Yes | Yes | Accent colours, wallpapers; **no dark mode yet** |
+| Dark mode / themes | Yes | Yes | Yes | **Dark mode (2.8)**, accent colours, wallpapers |
 | Accessibility | Narrator, magnifier, high contrast | VoiceOver, zoom | Orca, zoom | **No** |
 | Languages / right-to-left | Many, incl. Arabic | Many, incl. Arabic | Many, incl. Arabic | **English only, no Arabic / RTL** |
 | Fonts | Scalable (TrueType), many | Scalable | Scalable | One bitmap font (8x16), 2x/6x scaled |
@@ -70,7 +70,6 @@ built into MyOS 2.7:
 
 ## What is still missing (the next steps, roughly in order)
 
-- Dark mode (the window manager's colours are fixed constants today)
 - Virtual desktops / Task View
 - Arabic and right-to-left text, and a scalable font
 - Accessibility: magnifier, high contrast, keyboard-only navigation everywhere

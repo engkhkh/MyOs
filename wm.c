@@ -395,7 +395,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.7", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 2.8", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -435,7 +435,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.7  -  Search, notifications, lock screen", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 2.8  -  Dark mode", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -2315,6 +2315,7 @@ static const char *speed_names[4] = { "Slow", "Normal", "Fast", "Fastest" };
 #define SH_VOLM  30
 #define SH_VOLP  31
 #define SH_CHIME 32
+#define SH_DARK  33
 #define SH_SPEED 40     /* 40..43 */
 
 static void settings_changed(int visual) {
@@ -2351,6 +2352,7 @@ static int settings_hit(int lx, int ly) {
     if (inside(lx, ly, 16, 332, 32, 24)) return SH_VOLM;
     if (inside(lx, ly, 128, 332, 32, 24)) return SH_VOLP;
     if (inside(lx, ly, 260, 332, 200, 24)) return SH_CHIME;
+    if (inside(lx, ly, 376, 160, 150, 28)) return SH_DARK;
     for (int i = 0; i < 4; i++) if (inside(lx, ly, 16 + i * 100, 402, 92, 24)) return SH_SPEED + i;
     return -1;
 }
@@ -2368,6 +2370,7 @@ static void settings_click(int lx, int ly) {
     else if (h == SH_TZP && cfg.timezone < 14) { cfg.timezone++; settings_changed(0); }
     else if (h == SH_VOLM) { cfg.volume = cfg.volume >= 10 ? cfg.volume - 10 : 0; settings_changed(0); }
     else if (h == SH_VOLP) { cfg.volume = cfg.volume <= 90 ? cfg.volume + 10 : 100; settings_changed(0); }
+    else if (h == SH_DARK) { cfg.dark = !cfg.dark; settings_changed(0); }
     else if (h == SH_CHIME) { cfg.chime = !cfg.chime; settings_changed(0); if (cfg.chime) { sound_tone(523, 90); sound_tone(784, 140); } }
     else if (h >= SH_SPEED && h < SH_SPEED + 4) { cfg.mouse = h - SH_SPEED + 1; settings_changed(0); }
 }
@@ -2418,6 +2421,12 @@ static void draw_settings(int x, int y, int w, int h) {
         gfx_circle(cx, cy, 13, accents[i][0], 1);
     }
     gfx_text(x + 300, y + 198, accent_names[cfg.accent], C_MUTED, 0);
+    /* dark mode: a switch */
+    int was = gfx_theme; gfx_theme = 0;                        /* the switch keeps its own colours */
+    gfx_rfill(x + 380, y + 166, 40, 20, 10, cfg.dark ? C_ACCENT : 0x9CA3AF);
+    gfx_circle(cfg.dark ? x + 410 : x + 390, y + 176, 7, C_WHITE, 1);
+    gfx_theme = was;
+    gfx_text(x + 428, y + 168, "Dark mode", hv == SH_DARK ? C_ACCENT : C_TEXT, 1);
     gfx_fill(x + 16, y + 232, w - 32, 1, 0xE5E7EB);
     /* time zone */
     gfx_text(x + 16, y + 240, "Time zone", C_TEXT, 1);
@@ -2553,6 +2562,7 @@ static void draw_window(int app, int is_focused) {
         gfx_shade(x + w, y + 8, 6, h, 70);                           /* drop shadow: right edge */
         gfx_shade(x + 6, y + h, w - 6, 8, 70);                       /* and bottom edge */
     }
+    gfx_theme = cfg.dark && !is_focused;                           /* dark mode: grey title bars turn dark */
     gfx_fill(x, y, w, h, C_BORDER);
     if (is_focused) gfx_vgradient(x + 1, y + 1, w - 2, TITLE_H - 1, C_ACCENT, C_ACCENT2);
     else gfx_fill(x + 1, y + 1, w - 2, TITLE_H - 1, C_TITLE_OFF);
@@ -2590,6 +2600,7 @@ static void draw_window(int app, int is_focused) {
 
     int cx = x + 1, cy = y + TITLE_H, cw = w - 2, ch = h - TITLE_H - 1;
     gfx_clip(cx, cy, cw, ch);
+    gfx_theme = cfg.dark && app != APP_TERMINAL && !is_proc(app);  /* programs draw their own colours */
     switch (app) {
     case APP_TERMINAL: draw_terminal(cx, cy, cw, ch); break;
     case APP_NOTEPAD:  draw_notepad(cx, cy, cw, ch);  break;
@@ -2606,6 +2617,7 @@ static void draw_window(int app, int is_focused) {
         if (t->canvas) gfx_blit(cx, cy, t->cw, t->ch, t->canvas);
         break; }
     }
+    gfx_theme = 0;
     gfx_noclip();
 }
 
@@ -2680,6 +2692,7 @@ static void draw_start_menu(void) {
     int h = start_h(), x = 4, y = start_top();
     gfx_shade(x + START_W, y + 8, 6, h, 80);
     gfx_shade(x + 6, y + h, START_W - 6, 8, 80);
+    gfx_theme = cfg.dark;
     gfx_rfill(x, y, START_W, h, 8, 0xF9FAFB);
     gfx_vgradient(x, y, START_W, START_HEAD, C_ACCENT2, C_ACCENT);
     /* the search box */
@@ -2725,6 +2738,7 @@ static void draw_start_menu(void) {
         power_glyph(bx + 8, fy + 10, b, b == 2 ? 0xDC2626 : b == 1 ? 0xD97706 : C_ACCENT);
         gfx_text(bx + 30, fy + 12, power_names[b], C_TEXT, hover_key == 450 + b);
     }
+    gfx_theme = 0;
 }
 
 
@@ -3155,9 +3169,11 @@ static void render(void) {
     }
     draw_taskbar();
     if (start_open) draw_start_menu();
+    gfx_theme = cfg.dark;                                      /* pop-ups follow dark mode too */
     if (center_open) draw_center();
     else if (toast_on && nnotice) draw_toast();
     if (menu_on) draw_menu();
+    gfx_theme = 0;
     if (dd_on) {                                               /* the label that follows the pointer */
         char label[64], dest[FS_PATH_MAX], t[96];
         int kind = dd_target(label, dest);

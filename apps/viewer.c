@@ -151,6 +151,7 @@ int main(void) {
         scopy(start_name, arg + slash + 1, 64);
     }
     ui_init("Pictures", MINW, 200 + BAR + STATUS);
+    ui_no_theme();                                        /* pages and pictures keep their colours */
     ui_resizable(MINW, 200 + BAR + STATUS);
     static struct dirent all[256];
     int n = listdir(folder, all, 256);

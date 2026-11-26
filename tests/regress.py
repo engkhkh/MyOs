@@ -281,6 +281,7 @@ def boot1():
     contacts_tests(vm)
     calendar_tests(vm)
     v27_tests(vm)
+    dark_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -496,6 +497,26 @@ def lock_hash(pw):
         h = ((h ^ ch) * 16777619) & 0xFFFFFFFF
     return '%08x' % h
 
+def lum(p): return (p[0] * 3 + p[1] * 6 + p[2]) // 10
+
+def dark_tests(vm):
+    """v2.8: dark mode"""
+    focus_terminal(vm)
+    vm.cmd('theme dark', 1)
+    vm.cmd('settings', 2)
+    x, y, w = front_rect(vm)
+    vm.shot('111_dark_settings', 'v2.8 dark mode (theme dark): Settings, the Terminal behind, the menus and Start all follow it')
+    p = vm_pixel(vm, '111_dark_settings', x + 300, y + 40 + 150)
+    check('dark', 'theme dark: window contents turn dark', lum(p) < 60, p)
+    vm.key('meta_l'); time.sleep(0.8)
+    vm.shot('112_dark_start', 'v2.8 the Start menu in dark mode')
+    vm.key('esc'); time.sleep(0.3)
+    vm.click(x + 1 + 400, y + 30 + 176); time.sleep(1)          # the Dark mode switch
+    vm.shot('113_light_again', 'v2.8 the Dark mode switch in Settings turns it off again')
+    p = vm_pixel(vm, '113_light_again', x + 300, y + 40 + 150)
+    check('dark', 'the Settings switch turns dark mode off', lum(p) > 200, p)
+    vm.key('alt-f4'); time.sleep(0.5)
+
 def v27_tests(vm):
     """v2.7: Start search, screenshots, notifications, calendar reminders, lock screen, Win+E / Win+D"""
     import datetime
@@ -696,6 +717,7 @@ def boot1_disk():
     check('settings', 'wallpaper picture saved', 'picture=/Pictures/Valley.jpg' in ini, ini.replace('\r\n', ' '))
     check('settings', 'tz and volume saved', 'timezone=3' in ini.replace('+', '') or 'timezone=180' in ini, '')
     check('settings', 'explorer_view saved', 'explorer_view=1' in ini)
+    check('dark', 'the dark mode choice is saved in settings.ini', 'dark=0' in ini, '')
     if True:                                                     # (boot 1)
         check('lock', 'the password is kept only as a hash', 'password=' + lock_hash('secret') in ini and 'secret' not in ini, ini)
         shots = [l for l in mtools('mdir', '-b', '-i', OUT + '/part.img', '::/Pictures/Screenshots').splitlines() if l.lower().endswith('.png')]

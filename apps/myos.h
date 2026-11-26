@@ -91,6 +91,7 @@ static inline int clipget(char *buf, int max)       { return sys(SYS_CLIPGET, (u
 static inline int deletefile(const char *p)  { return sys(SYS_DELETE, (uint32_t)p, 0, 0, 0, 0); }
 static inline int makedir(const char *p)     { return sys(SYS_MKDIR, (uint32_t)p, 0, 0, 0, 0); }
 static inline void notify(const char *title, const char *text) { sys(SYS_NOTIFY, (uint32_t)title, (uint32_t)text, 0, 0, 0); }
+static inline int theme(void) { return sys(SYS_THEME, 0, 0, 0, 0, 0); }
 
 /* Memory: provided by malloc.c, which is linked into every program. */
 void *malloc(uint32_t size);

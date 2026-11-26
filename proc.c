@@ -479,6 +479,7 @@ uint32_t proc_syscall(struct regs *r) {
         path_resolve("/", path, abs);
         ret = fs_write(abs, (void *)b, c) ? (int32_t)c : -1;
         break; }
+    case SYS_THEME: ret = cfg.dark; break;
     case SYS_NOTIFY: {
         char title[40], text[72];
         if (!user_str(t, a, title, sizeof title)) { ret = -1; break; }

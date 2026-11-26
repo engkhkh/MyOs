@@ -48,6 +48,7 @@
 #define SYS_DELETE    41   /* deletefile(path): delete a file (not a folder); 0 = ok, -1 = error */
 #define SYS_MKDIR     42   /* makedir(path): make a folder; 0 = ok (or it already exists), -1 = error */
 #define SYS_NOTIFY    43   /* notify(title, text): a pop-up notification (also kept in the notification centre) */
+#define SYS_THEME     44   /* theme(): 1 when dark mode is on */
 #define SYS_CLIPGET   37   /* clipget(buf, max): copy clipboard text into buf; returns its full length */
 
 /* Folder entries returned by listdir() */

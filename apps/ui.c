@@ -1,5 +1,7 @@
 /* ui.c - the MyOS widget toolkit (see ui.h). */
 #include "ui.h"
+#include "../theme.h"
+static void theme_refresh(void);
 
 struct ui_state ui;
 static uint8_t font_r[128][16], font_b[128][16];
@@ -24,6 +26,7 @@ void ui_init(const char *title, int w, int h) {
     getfont(&font_r[0][0], 0);
     getfont(&font_b[0][0], 1);
     settitle(title);
+    theme_refresh();
     ui_resize(w, h);
     ui_fill(0, 0, w, h, UI_BG);
     ui.mx = ui.my = -10000;
@@ -88,7 +91,7 @@ void ui_wait(int ms) {
 }
 void ui_next(void) { ui_wait(-1); }
 
-void ui_present(void) { blit(0, 0, ui.w, ui.h, ui.px, ui.w); }
+void ui_present(void) { blit(0, 0, ui.w, ui.h, ui.px, ui.w); theme_refresh(); }   /* the next frame follows dark mode */
 void ui_present_rect(int x, int y, int w, int h) {
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }
@@ -104,12 +107,20 @@ void ui_clip(int x, int y, int w, int h) {
 }
 void ui_noclip(void) { clip_x0 = clip_y0 = 0; clip_x1 = ui.w; clip_y1 = ui.h; }
 
+/* dark mode (theme.h): programs follow it unless they call ui_no_theme() (pictures, cards...) */
+static int theme_allowed = 1, dark_now;
+void ui_no_theme(void) { theme_allowed = 0; dark_now = 0; }
+int ui_dark(void) { return dark_now; }
+static void theme_refresh(void) { dark_now = theme_allowed && theme(); }
+#define THEMED(c) (dark_now ? theme_dark_map(c) : (c))
 void ui_pixel(int x, int y, uint32_t c) {
+    c = THEMED(c);
     if (x >= clip_x0 && x < clip_x1 && y >= clip_y0 && y < clip_y1) ui.px[y * ui.w + x] = c;
 }
 void ui_fill(int x, int y, int w, int h, uint32_t c) {
     int x0 = x < clip_x0 ? clip_x0 : x, y0 = y < clip_y0 ? clip_y0 : y;
     int x1 = x + w > clip_x1 ? clip_x1 : x + w, y1 = y + h > clip_y1 ? clip_y1 : y + h;
+    c = THEMED(c);
     for (int j = y0; j < y1; j++) { uint32_t *p = ui.px + j * ui.w; for (int i = x0; i < x1; i++) p[i] = c; }
 }
 static int isqrt(int v) { int r = 0; while ((r + 1) * (r + 1) <= v) r++; return r; }

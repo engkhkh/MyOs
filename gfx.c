@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "kernel.h"
+#include "theme.h"
 #include "font.h"
 
 static uint32_t *fb;            /* the real screen */
@@ -100,7 +101,11 @@ static inline int cy0(void) { return clip_y0 > 0 ? clip_y0 : 0; }
 static inline int cx1(void) { return clip_x1 < gfx_w ? clip_x1 : gfx_w; }
 static inline int cy1(void) { return clip_y1 < gfx_h ? clip_y1 : gfx_h; }
 
+/* dark mode: while gfx_theme is on, colours go through theme_dark_map() (see theme.h) */
+int gfx_theme;
+#define THEMED(c) (gfx_theme ? theme_dark_map(c) : (c))
 void gfx_pixel(int x, int y, uint32_t c) {
+    c = THEMED(c);
     if (x >= cx0() && x < cx1() && y >= cy0() && y < cy1()) back[y * gfx_w + x] = c;
 }
 
@@ -108,6 +113,7 @@ void gfx_fill(int x, int y, int w, int h, uint32_t c) {
     int x0 = x < cx0() ? cx0() : x, y0 = y < cy0() ? cy0() : y;
     int x1 = x + w > cx1() ? cx1() : x + w, y1 = y + h > cy1() ? cy1() : y + h;
     if (x0 >= x1 || y0 >= y1) return;
+    c = THEMED(c);
     for (int j = y0; j < y1; j++) memset32(&back[j * gfx_w + x0], c, x1 - x0);
 }
 
@@ -132,6 +138,7 @@ void gfx_vgradient(int x, int y, int w, int h, uint32_t top, uint32_t bottom) {
  * amount is 0..256; done with multiply + shift, no division, so it is fast. */
 /* See-through colour over a rectangle: amount/256 of c (the snap preview, ...). */
 void gfx_tint(int x, int y, int w, int h, uint32_t c, int amount) {
+    c = THEMED(c);
     int x0 = x < cx0() ? cx0() : x, y0 = y < cy0() ? cy0() : y;
     int x1 = x + w > cx1() ? cx1() : x + w, y1 = y + h > cy1() ? cy1() : y + h;
     for (int j = y0; j < y1; j++) {

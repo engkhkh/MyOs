@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.7 (stage 27: ideas from Windows, macOS and Ubuntu - search, notifications, screenshots, lock screen). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
+Version 2.8 (stage 28: dark mode). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -131,6 +131,11 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Dark mode**: Settings > the Dark mode switch, or `theme dark` / `theme light` in the
+  Terminal (saved in settings.ini). File Explorer, Notepad, Settings and the other
+  built-in windows, the Start menu, right-click menus, notifications and the toolkit
+  programs (Notes, Contacts, Calendar...) turn dark; the accent colour stays. Pictures,
+  web pages and the card games keep their own colours (`ui_no_theme()` in a program)
 - **Search from Start**: open Start (Windows key or the Start button) and just type -
   apps first, then files and folders anywhere on C:. Up/Down + Enter, or click.
 - **Notifications**: pop-ups at the bottom right, and the bell on the taskbar keeps the
@@ -288,5 +293,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 25. ✅ Notes and Contacts apps; multi-line text widget; delete-file / make-folder system calls
 26. ✅ Calendar (month view, events, opens from the taskbar clock); the date now follows the time zone
 27. ✅ Compared with Windows / macOS / Ubuntu (docs/COMPARISON.md): Start search, notifications, reminders, screenshots, lock screen, Win+E / Win+D
-28. Dark mode, virtual desktops, Arabic / right-to-left, HTTPS (TLS)
-29. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+28. ✅ Dark mode (theme.h colour mapping in gfx.c and the toolkit; Settings switch, `theme` command; system call 44 `theme()`)
+29. Virtual desktops, Arabic / right-to-left, HTTPS (TLS)
+30. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

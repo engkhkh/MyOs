@@ -131,6 +131,7 @@ void gfx_text2x(int x, int y, const char *s, uint32_t c);
 void wm_notify(const char *title, const char *text, const char *path);
 void wm_lock(void);
 void wm_screenshot(void);
+extern int gfx_theme;                    /* 1 = draw in dark mode colours (theme.h) */
 void gfx_text_scaled(int x, int y, const char *s, uint32_t c, int scale);
 const uint32_t *gfx_backbuffer(void);
 /* png_write.c */
@@ -279,6 +280,7 @@ int proc_current(void);
 struct settings {
     int wallpaper; char picture[FS_PATH_MAX];
     int accent, timezone, volume, chime, mouse; int explorer_view; /* mouse speed 1 slow .. 4 fastest */
+    int dark;                                /* 1 = dark mode */
     char password[12];                       /* "" = no password; else a hash in hex (see shell "password") */
 };
 extern struct settings cfg;

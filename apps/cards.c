@@ -70,6 +70,7 @@ static void draw_face(int x, int y, int c) {
 #define KEYCOL 0xFF00FF                                     /* "transparent" (the rounded corners) */
 static uint32_t *sprite[53];
 void cards_init(void) {
+    ui_no_theme();                                    /* cards and the green table keep their colours */
     uint32_t *keep = ui.px; int kw = ui.w, kh = ui.h;
     for (int i = 0; i < 53; i++) {
         sprite[i] = malloc(CW * CH * 4);

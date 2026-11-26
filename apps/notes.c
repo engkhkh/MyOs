@@ -261,7 +261,7 @@ int main(void) {
                 if (r == 0) delete_current();
                 if (r >= 0) ask_delete = 0;
             } else if (show_about) {
-                if (ui_dialog("About Notes", "Notes for MyOS 2.7", "Each note is a .txt file in C:\\Notes.", "OK", 0) >= 0) show_about = 0;
+                if (ui_dialog("About Notes", "Notes for MyOS 2.8", "Each note is a .txt file in C:\\Notes.", "OK", 0) >= 0) show_about = 0;
             }
         }
         /* save a moment after the typing stops */

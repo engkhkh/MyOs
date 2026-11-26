@@ -84,6 +84,8 @@ int  ui_textbox(int id, int x, int y, int w, char *buf, int max);   /* 1 when En
  * Returns 1 when the text changed this frame. */
 struct ui_textarea { int caret, anchor, scroll, dragging; };
 int  ui_textarea(int id, int x, int y, int w, int h, char *buf, int max, struct ui_textarea *st);
+void ui_no_theme(void);                                      /* keep this program's own colours in dark mode */
+int  ui_dark(void);                                          /* 1 while drawing in dark mode */
 void ui_textarea_reset(struct ui_textarea *st);              /* caret to the start, nothing selected */
 int  ui_list(int id, int x, int y, int w, int h, const char *const *items, int n, int *sel, int *scroll);
                                                                     /* 1 = selection changed, 2 = double-click / Enter */
