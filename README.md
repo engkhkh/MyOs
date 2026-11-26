@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.8 (stage 28: dark mode). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
+Version 2.9 (stage 29: virtual desktops). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -131,6 +131,13 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Virtual desktops** (up to 4): the Task View button next to Start (or **Win+Tab**)
+  shows each desktop with its windows - click one to go there, + for a new one, x to
+  close one (its windows move to the desktop next to it). **Win+Ctrl+Left / Right**
+  switch, **Win+Ctrl+D** a new desktop, **Win+Ctrl+F4** closes this one. The taskbar
+  and Alt+Tab show only this desktop's windows. To move a window, right-click its title
+  bar > Move to desktop N (or to a new desktop). Opening a program that is already open
+  on another desktop takes you there
 - **Dark mode**: Settings > the Dark mode switch, or `theme dark` / `theme light` in the
   Terminal (saved in settings.ini). File Explorer, Notepad, Settings and the other
   built-in windows, the Start menu, right-click menus, notifications and the toolkit
@@ -294,5 +301,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 26. ✅ Calendar (month view, events, opens from the taskbar clock); the date now follows the time zone
 27. ✅ Compared with Windows / macOS / Ubuntu (docs/COMPARISON.md): Start search, notifications, reminders, screenshots, lock screen, Win+E / Win+D
 28. ✅ Dark mode (theme.h colour mapping in gfx.c and the toolkit; Settings switch, `theme` command; system call 44 `theme()`)
-29. Virtual desktops, Arabic / right-to-left, HTTPS (TLS)
-30. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+29. ✅ Virtual desktops (Task View, Win+Tab, Win+Ctrl+Left/Right/D/F4, Move to desktop)
+30. Arabic / right-to-left, HTTPS (TLS)
+31. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

@@ -72,6 +72,11 @@ static int decode(uint8_t sc) {
     if (sc & 0x80) return -1;                                  /* key released */
     if (win) {
         win_combo = 1;
+        if (sc == 0x0F) return KEY_TASKVIEW;                   /* Win+Tab: Task View */
+        if (ctrl && ext && sc == 0x4D) return KEY_DESK_NEXT;   /* Win+Ctrl+Right / Left: next / previous desktop */
+        if (ctrl && ext && sc == 0x4B) return KEY_DESK_PREV;
+        if (ctrl && sc == 0x20) return KEY_DESK_NEW;           /* Win+Ctrl+D: a new desktop */
+        if (ctrl && sc == 0x3E) return KEY_DESK_CLOSE;         /* Win+Ctrl+F4: close this desktop */
         if (sc == 0x26) return KEY_LOCK;                       /* Win+L: lock */
         if (sc == 0x12) return KEY_WIN_E;                      /* Win+E: File Explorer */
         if (sc == 0x20) return KEY_WIN_D;                      /* Win+D: show the desktop */

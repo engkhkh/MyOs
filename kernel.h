@@ -82,6 +82,11 @@ void kfree(void *p);
 #define KEY_LOCK  0x113               /* Win+L */
 #define KEY_WIN_E 0x114               /* Win+E */
 #define KEY_WIN_D 0x115               /* Win+D */
+#define KEY_TASKVIEW   0x116          /* Win+Tab */
+#define KEY_DESK_NEXT  0x117          /* Win+Ctrl+Right */
+#define KEY_DESK_PREV  0x118          /* Win+Ctrl+Left */
+#define KEY_DESK_NEW   0x119          /* Win+Ctrl+D */
+#define KEY_DESK_CLOSE 0x11A          /* Win+Ctrl+F4 */
 #define KEY_CTRL(c) (0x200 | (c))           /* Ctrl + letter, e.g. KEY_CTRL('s') */
 
 /* kernel.c */

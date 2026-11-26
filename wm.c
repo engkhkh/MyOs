@@ -85,8 +85,18 @@ static int caret_on = 1;
 static int inside(int px, int py, int x, int y, int w, int h) { return px >= x && px < x + w && py >= y && py < y + h; }
 static struct window *find(int app) { for (int i = 0; i < nwin; i++) if (zorder[i] == app) return &wins[app]; return 0; }
 
+/* ---------- virtual desktops ----------
+ * Every window belongs to one desktop (win_desk); only the current one's windows are
+ * drawn, listed on the taskbar, clicked or given the keyboard. */
+#define MAX_DESKS 4
+static int win_desk[NWIN], cur_desk, ndesks = 1;
+static uint32_t desk_banner_until;                              /* "Desktop 2" shown after a switch */
+static int taskview, tv_sel;                                   /* Task View is open; the desktop picked with the keys */
+static int on_desk(int a) { return win_desk[a] == cur_desk; }
+
 static void focus(int app) {
     desk_focus = 0;
+    if (!on_desk(app)) { cur_desk = win_desk[app]; desk_banner_until = ticks + TIMER_HZ; }   /* its desktop comes too */
     int i = 0;
     while (i < nwin && zorder[i] != app) i++;
     if (i == nwin) return;
@@ -101,6 +111,7 @@ static void open_app(int app) {
     if (find(app)) { focus(app); return; }
     wins[app] = (struct window){ app, app_x[app], app_y[app], app_w[app], app_h[app], 0, 0, 0, 0, 0, 0, 0 };
     zorder[nwin++] = app;
+    win_desk[app] = cur_desk;
     dirty = 1;
 }
 
@@ -116,7 +127,7 @@ static void close_app(int app) {
 
 /* Topmost visible window that isn't minimized, used for keyboard focus. */
 static int focused(void) {
-    for (int i = nwin - 1; i >= 0; i--) if (!wins[zorder[i]].minimized) return zorder[i];
+    for (int i = nwin - 1; i >= 0; i--) if (!wins[zorder[i]].minimized && on_desk(zorder[i])) return zorder[i];
     return -1;
 }
 
@@ -395,7 +406,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.8", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 2.9", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -435,7 +446,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.8  -  Dark mode", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 2.9  -  Virtual desktops", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -2104,6 +2115,7 @@ void wm_proc_opened(int slot) {
     cascade++;
     wins[id] = (struct window){ id, x, y, PROC_CANVAS_W + 2, PROC_CANVAS_H + TITLE_H + 1, 0, 0, 0, 0, 0, 0, 0 };
     zorder[nwin++] = id;
+    win_desk[id] = cur_desk;
     desk_focus = 0;                                            /* a new window takes the keyboard */
     dirty = 1;
 }
@@ -2647,7 +2659,7 @@ static void draw_logo(int x, int y, uint32_t a, uint32_t b) {      /* MyOS mark:
     gfx_circle(x + 15, y + 10, 7, b, 0);
 }
 
-static void taskbar_button_rect(int slot, int *x, int *w) { *x = 112 + slot * 128; *w = 124; }
+static void taskbar_button_rect(int slot, int *x, int *w) { *x = 156 + slot * 128; *w = 124; }
 
 static void draw_bell(int y);
 static void draw_taskbar(void) {
@@ -2658,10 +2670,14 @@ static void draw_taskbar(void) {
     if (start_open || hover_key == 100) gfx_rfill(4, y + 4, 100, TASKBAR_H - 8, 6, C_TASK_HI);
     draw_logo(14, y + 12, 0x60A5FA, 0xF472B6);
     gfx_text(44, y + 14, "Start", C_WHITE, 1);
-    /* one button per open window, in the order they were opened */
+    /* Task View: two overlapping squares, and which desktop this is */
+    if (hover_key == 106 || taskview) gfx_rfill(110, y + 4, 40, TASKBAR_H - 8, 6, C_TASK_HI);
+    gfx_rect(118, y + 13, 16, 13, C_WHITE); gfx_rect(124, y + 18, 16, 13, C_WHITE); gfx_fill(125, y + 19, 14, 11, C_TASKBAR);
+    if (ndesks > 1) { char n[2] = { (char)('1' + cur_desk), 0 }; gfx_text(128, y + 16, n, C_ACCENT_HI, 1); }
+    /* one button per open window (on this desktop), in the order they were opened */
     int slot = 0;
     for (int a = 0; a < NWIN; a++) {
-        if (!find(a)) continue;
+        if (!find(a) || !on_desk(a)) continue;
         int bx, bw; taskbar_button_rect(slot, &bx, &bw);
         if (bx + bw > gfx_w - 140) break;                     /* no more room */
         int active = focused() == a;
@@ -3022,10 +3038,120 @@ static void lock_key(int k) {
 static void show_desktop(void) {
     static int hidden[NWIN], nhidden;
     int any = 0;
-    for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized) any = 1;
-    if (any) { nhidden = 0; for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized) { wins[zorder[i]].minimized = 1; hidden[nhidden++] = zorder[i]; } }
+    for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized && on_desk(zorder[i])) any = 1;
+    if (any) { nhidden = 0; for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized && on_desk(zorder[i])) { wins[zorder[i]].minimized = 1; hidden[nhidden++] = zorder[i]; } }
     else { for (int i = 0; i < nhidden; i++) if (find(hidden[i])) wins[hidden[i]].minimized = 0; nhidden = 0; }
     dirty = 1;
+}
+
+
+/* ================= virtual desktops: switching and Task View ================= */
+#define TV_W 208
+#define TV_H 156
+#define TV_GAP 28
+#define TV_Y 90
+static void desk_switch(int k) {
+    if (k < 0 || k >= ndesks) return;
+    cur_desk = k; desk_banner_until = ticks + TIMER_HZ; start_close(); menu_on = 0; dirty = 1;
+}
+static void desk_new(void) {
+    if (ndesks >= MAX_DESKS) { wm_notify("Desktops", "4 desktops is the most", 0); return; }
+    ndesks++; desk_switch(ndesks - 1);
+}
+static void desk_close(int k) {                                 /* its windows go to the desktop next to it */
+    if (ndesks <= 1 || k < 0 || k >= ndesks) return;
+    int to = k > 0 ? k - 1 : 0;
+    for (int a = 0; a < NWIN; a++) {
+        if (win_desk[a] == k) win_desk[a] = to;
+        else if (win_desk[a] > k) win_desk[a]--;
+    }
+    ndesks--;
+    if (cur_desk > k || cur_desk >= ndesks) cur_desk = cur_desk > 0 ? cur_desk - 1 : 0;
+    if (cur_desk == k && k == 0) cur_desk = 0;
+    desk_banner_until = ticks + TIMER_HZ; dirty = 1;
+}
+static void move_to_desk(int a, int k) {
+    if (k == ndesks) { if (ndesks >= MAX_DESKS) return; ndesks++; }
+    win_desk[a] = k; dirty = 1;
+}
+static int tv_x(int k) {                                        /* tiles centred, the "+" tile last */
+    int n = ndesks + (ndesks < MAX_DESKS), total = n * TV_W + (n - 1) * TV_GAP;
+    return (gfx_w - total) / 2 + k * (TV_W + TV_GAP);
+}
+/* a small picture of desktop k: the wallpaper and its windows as boxes */
+static void draw_desk_thumb(int k, int x, int y) {
+    for (int j = 0; j < TV_H; j++) {
+        const uint32_t *src = wallpaper + (j * (gfx_h - TASKBAR_H) / TV_H) * gfx_w;
+        for (int i = 0; i < TV_W; i++) gfx_pixel(x + i, y + j, src[i * gfx_w / TV_W]);
+    }
+    for (int i = 0; i < nwin; i++) {
+        int a = zorder[i];
+        if (win_desk[a] != k || wins[a].minimized) continue;
+        struct window *w = &wins[a];
+        int wx = x + w->x * TV_W / gfx_w, wy = y + w->y * TV_H / (gfx_h - TASKBAR_H);
+        int ww = w->w * TV_W / gfx_w, wh = w->h * TV_H / (gfx_h - TASKBAR_H);
+        if (ww < 8) ww = 8;
+        if (wh < 8) wh = 8;
+        gfx_clip(x, y, TV_W, TV_H);
+        gfx_fill(wx, wy, ww, wh, a == APP_TERMINAL ? 0x0C0C0C : cfg.dark ? 0x1F2937 : 0xF9FAFB);
+        gfx_fill(wx, wy, ww, 5, C_ACCENT);
+        if (ww > 24 && wh > 24) icon(a, wx + ww / 2 - 8, wy + wh / 2 - 6, 16);
+        gfx_noclip();
+    }
+}
+static void draw_taskview(void) {
+    gfx_noclip();
+    gfx_shade(0, 0, gfx_w, gfx_h - TASKBAR_H, 170);
+    gfx_text2x(gfx_w / 2 - 9 * 16 / 2, 30, "Task View", C_WHITE);
+    for (int k = 0; k < ndesks; k++) {
+        int x = tv_x(k), y = TV_Y, hot = hover_key == 700 + k || (hover_key < 700 && tv_sel == k);
+        if (k == cur_desk || hot) gfx_rfill(x - 5, y - 5, TV_W + 10, TV_H + 10, 8, k == cur_desk ? C_ACCENT : 0x9CA3AF);
+        draw_desk_thumb(k, x, y);
+        char t[12] = "Desktop 1"; t[8] = (char)('1' + k);
+        gfx_text(x + TV_W / 2 - 36, y + TV_H + 12, t, C_WHITE, k == cur_desk);
+        int n = 0; for (int a = 0; a < NWIN; a++) if (find(a) && win_desk[a] == k) n++;
+        char c[16], *q = utoa(c, n); cat(q, n == 1 ? " window" : " windows");
+        gfx_text(x + TV_W / 2 - (int)kstrlen_(c) * 4, y + TV_H + 30, c, 0xD1D5DB, 0);
+        if (ndesks > 1) {                                       /* close */
+            gfx_circle(x + TV_W - 4, y + 4, 11, hover_key == 710 + k ? 0xDC2626 : 0x374151, 1);
+            gfx_line(x + TV_W - 8, y, x + TV_W, y + 8, C_WHITE); gfx_line(x + TV_W, y, x + TV_W - 8, y + 8, C_WHITE);
+        }
+    }
+    if (ndesks < MAX_DESKS) {                                    /* new desktop */
+        int x = tv_x(ndesks), y = TV_Y;
+        gfx_rfill(x, y, TV_W, TV_H, 8, hover_key == 720 ? 0x4B5563 : 0x374151);
+        gfx_fill(x + TV_W / 2 - 16, y + TV_H / 2 - 2, 32, 4, C_WHITE); gfx_fill(x + TV_W / 2 - 2, y + TV_H / 2 - 16, 4, 32, C_WHITE);
+        gfx_text(x + TV_W / 2 - 44, y + TV_H + 12, "New desktop", C_WHITE, 0);
+    }
+    const char *h1 = "Click a desktop to go to it.  Win+Ctrl+Left / Right switch,  Win+Ctrl+D new.";
+    const char *h2 = "To move a window, right-click its title bar > Move to desktop.";
+    gfx_text(gfx_w / 2 - (int)kstrlen_(h1) * 4, TV_Y + TV_H + 80, h1, 0xD1D5DB, 0);
+    gfx_text(gfx_w / 2 - (int)kstrlen_(h2) * 4, TV_Y + TV_H + 100, h2, 0xD1D5DB, 0);
+}
+static int taskview_hover(void) {
+    for (int k = 0; k < ndesks; k++) {
+        int x = tv_x(k);
+        if (ndesks > 1 && inside(mx, my, x + TV_W - 15, TV_Y - 7, 22, 22)) return 710 + k;
+        if (inside(mx, my, x, TV_Y, TV_W, TV_H)) return 700 + k;
+    }
+    if (ndesks < MAX_DESKS && inside(mx, my, tv_x(ndesks), TV_Y, TV_W, TV_H)) return 720;
+    return my < gfx_h - TASKBAR_H ? 799 : -1;                   /* 799 = the dark background */
+}
+static void taskview_click(int h) {
+    if (h >= 700 && h < 700 + MAX_DESKS) { desk_switch(h - 700); taskview = 0; }
+    else if (h >= 710 && h < 710 + MAX_DESKS) desk_close(h - 710);
+    else if (h == 720) { desk_new(); taskview = 0; }
+    else taskview = 0;
+    dirty = 1;
+}
+static void draw_desk_banner(void) {                            /* "Desktop 2" for a moment after a switch */
+    if ((int)(desk_banner_until - ticks) <= 0 || ndesks < 2) return;
+    int w = 220, h = 80, x = (gfx_w - w) / 2, y = (gfx_h - TASKBAR_H - h) / 2;
+    gfx_noclip();
+    gfx_rfill(x, y, w, h, 12, 0x1F2937);
+    char t[12] = "Desktop 1"; t[8] = (char)('1' + cur_desk);
+    gfx_text2x(x + w / 2 - 72, y + 16, t, C_WHITE);
+    for (int k = 0; k < ndesks; k++) gfx_circle(x + w / 2 - (ndesks - 1) * 9 + k * 18, y + 60, 4, k == cur_desk ? C_ACCENT_HI : 0x6B7280, 1);
 }
 
 /* a desktop file or folder, 40 x 40 */
@@ -3157,7 +3283,9 @@ static void render(void) {
     }
     int f = focused();
     for (int i = 0; i < nwin; i++)
-        if (!wins[zorder[i]].minimized) draw_window(zorder[i], zorder[i] == f);
+        if (!wins[zorder[i]].minimized && on_desk(zorder[i])) draw_window(zorder[i], zorder[i] == f);
+    if (taskview) draw_taskview();
+    else draw_desk_banner();
     if (drag >= 0 && snap_zone) {                              /* where the window will go */
         int minw, minh; win_resizable(drag, &minw, &minh);
         int w = snap_zone == 1 ? gfx_w : (gfx_w / 2 > minw ? gfx_w / 2 : minw), h = gfx_h - TASKBAR_H;
@@ -3198,7 +3326,7 @@ static void render(void) {
 static int hit_window(int px, int py) {
     for (int i = nwin - 1; i >= 0; i--) {
         struct window *w = &wins[zorder[i]];
-        if (!w->minimized && inside(px, py, w->x, w->y, w->w, w->h)) return zorder[i];
+        if (!w->minimized && on_desk(zorder[i]) && inside(px, py, w->x, w->y, w->w, w->h)) return zorder[i];
     }
     return -1;
 }
@@ -3297,7 +3425,8 @@ enum { M_OPEN = 1, M_NOTEPAD, M_CUT, M_COPY, M_PASTE_INTO, M_DELETE, M_RENAME, M
        M_DESK_OPEN, M_DESK_EMPTY, M_EXPLORER, M_TERMINAL, M_SETTINGS, M_TASKMGR, M_ABOUT,
        M_N_UNDO, M_N_CUT, M_N_COPY, M_N_PASTE, M_N_ALL, M_N_FIND, M_T_PASTE,
        M_D_OPEN, M_D_CUT, M_D_COPY, M_D_PASTEINTO, M_D_DELETE, M_D_RENAME, M_D_PROPS,
-       M_D_NEWFOLDER, M_D_NEWFILE, M_D_PASTE, M_D_ARRANGE };
+       M_D_NEWFOLDER, M_D_NEWFILE, M_D_PASTE, M_D_ARRANGE,
+       M_WDESK0, M_WDESK1, M_WDESK2, M_WDESK3, M_WDESKNEW };
 
 /* paste the clipboard into another folder; File Explorer stays where it was */
 static void paste_into(const char *folder) {
@@ -3329,6 +3458,10 @@ static void window_menu(int a, int x, int y) {                 /* title bar / ta
     menu_add("Restore", M_WRESTORE, !(big || w->minimized));
     menu_add("Minimise", M_WMIN, w->minimized);
     menu_add("Maximise", M_WMAX, !rz || w->maxed);
+    static const char *move_names[] = { "Move to desktop 1", "Move to desktop 2", "Move to desktop 3", "Move to desktop 4" };
+    if (ndesks > 1 || ndesks < MAX_DESKS) menu_add("", 0, 0);
+    for (int k = 0; k < ndesks; k++) if (k != win_desk[a]) menu_add(move_names[k], M_WDESK0 + k, 0);
+    if (ndesks < MAX_DESKS) menu_add("Move to a new desktop", M_WDESKNEW, 0);
     menu_add("", 0, 0);
     menu_add("Close        Alt+F4", M_WCLOSE, 0);
     menu_show(x, y);
@@ -3491,6 +3624,8 @@ static void menu_run(int id) {
     case M_D_NEWFILE: open_app(APP_EXPLORER); ex_go(DESK_DIR); ex_new(0); break;
     case M_D_PASTE: paste_into(DESK_DIR); break;
     case M_D_ARRANGE: icons_auto_arrange(); break;
+    case M_WDESK0: case M_WDESK1: case M_WDESK2: case M_WDESK3: move_to_desk(a, id - M_WDESK0); break;
+    case M_WDESKNEW: move_to_desk(a, ndesks); break;
     }
 }
 /* the right mouse button went down */
@@ -3528,6 +3663,7 @@ static void menu_key(int k) {
 
 static int compute_hover(void) {
     if (locked) return -1;
+    if (taskview) { int t = taskview_hover(); if (t >= 0) return t; }
     if (menu_on) { int r = menu_at(mx, my); if (r != -1) return r >= 0 ? 900 + r : 899; }
     if (center_open) {                                         /* the notification centre */
         int x = gfx_w - CENTER_W - 8, y = center_y();
@@ -3555,11 +3691,12 @@ static int compute_hover(void) {
     }
     if (my >= gfx_h - TASKBAR_H) {
         if (mx < 108) return 100;
+        if (mx >= 110 && mx < 150) return 106;                  /* Task View */
         if (mx >= gfx_w - 96) return 101;
         if (mx >= bell_x() && mx < bell_x() + 36) return 102;   /* notifications */                      /* the clock: opens Calendar */
         int slot = 0;
         for (int a = 0; a < NWIN; a++) {
-            if (!find(a)) continue;
+            if (!find(a) || !on_desk(a)) continue;
             int bx, bw; taskbar_button_rect(slot++, &bx, &bw);
             if (inside(mx, my, bx, gfx_h - TASKBAR_H, bw, TASKBAR_H)) return 200 + a;
         }
@@ -3605,6 +3742,9 @@ static void do_power(int kind) {
 
 static void left_click(void) {
     desk_focus = 0;                                            /* set again below if the click is on the desktop */
+    if (taskview && hover_key >= 700 && hover_key < 800) { taskview_click(hover_key); return; }
+    if (hover_key == 106) { taskview = !taskview; tv_sel = cur_desk; start_close(); dirty = 1; return; }   /* Task View button */
+    if (taskview) { taskview = 0; dirty = 1; }
     if (hover_key == 103) { notice_open(0); return; }          /* the pop-up */
     if (center_open) {
         if (hover_key == 104) { nnotice = 0; unread = 0; dirty = 1; return; }   /* Clear all */
@@ -3823,6 +3963,18 @@ void wm_key(int k) {
     if (k == KEY_PRTSC) { wm_screenshot(); return; }
     if (k == KEY_WIN_E) { start_close(); open_app(APP_EXPLORER); return; }
     if (k == KEY_WIN_D) { start_close(); show_desktop(); return; }
+    if (k == KEY_TASKVIEW) { taskview = !taskview; tv_sel = cur_desk; start_close(); dirty = 1; return; }
+    if (k == KEY_DESK_NEXT) { taskview = 0; desk_switch(cur_desk + 1 < ndesks ? cur_desk + 1 : cur_desk); return; }
+    if (k == KEY_DESK_PREV) { taskview = 0; desk_switch(cur_desk > 0 ? cur_desk - 1 : 0); return; }
+    if (k == KEY_DESK_NEW) { taskview = 0; desk_new(); return; }
+    if (k == KEY_DESK_CLOSE) { taskview = 0; desk_close(cur_desk); return; }
+    if (taskview) {                                            /* keys in Task View */
+        if (k == KEY_ESC) taskview = 0;
+        else if (k == KEY_LEFT && tv_sel > 0) tv_sel--;
+        else if (k == KEY_RIGHT && tv_sel < ndesks - 1) tv_sel++;
+        else if (k == '\n') { desk_switch(tv_sel); taskview = 0; }
+        dirty = 1; return;
+    }
     if (center_open && k == KEY_ESC) { center_open = 0; dirty = 1; return; }
     if (menu_on) { menu_key(k); return; }
     if (start_open && k != KEY_START && k != KEY_F1 && start_key(k)) return;
@@ -3844,7 +3996,7 @@ void wm_key(int k) {
         dirty = 1; return;
     }
     if (k == KEY_ALTTAB) {                                     /* the window at the back comes to the front */
-        if (nwin > 1) focus(zorder[0]);
+        for (int i = 0; i < nwin; i++) if (on_desk(zorder[i]) && zorder[i] != focused()) { focus(zorder[i]); break; }
         return;
     }
     if (desk_focus && k != KEY_START && k != KEY_ALTTAB && k != KEY_ALTF4) {   /* the desktop was clicked last */
@@ -3897,6 +4049,7 @@ void wm_update(void) {
         if (locked) dirty = 1;                                 /* the lock screen's clock */
     }
     if (toast_on && (int)(ticks - toast_until) > 0) { toast_on = 0; dirty = 1; }
+    if (desk_banner_until && (int)(ticks - desk_banner_until) > 0) { desk_banner_until = 0; dirty = 1; }
     if (con_dirty && find(APP_TERMINAL)) dirty = 1;
     /* Redraw at most ~30 times a second, so animations don't eat the CPU. */
     static int bg_full;               /* a partly hidden program window changed */

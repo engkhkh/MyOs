@@ -1,6 +1,6 @@
 # MyOS compared with Windows 11, macOS and Ubuntu Linux
 
-Written for MyOS 2.7 (November 2026). "Yes" means the feature exists and works in
+Written for MyOS 2.7 and kept up to date (2.9: dark mode and virtual desktops added). "Yes" means the feature exists and works in
 MyOS today; "Partly" means a simpler version exists; "No" means it is missing.
 The big three are mature systems built by large teams over decades; MyOS is a
 from-scratch learning OS, so the point of this table is to show what is
@@ -20,7 +20,7 @@ there, what is simpler, and what to build next.
 | Notifications | Toasts + notification centre | Notification Centre | Message tray | **Pop-ups + notification centre (new)** |
 | Calendar reminders | Yes | Yes | Yes | **Yes, even with Calendar closed (new)** |
 | Screenshots | PrtScn, Snipping Tool | Cmd+Shift+3/4 | PrtScn tool | **PrtScn saves a PNG (new)**; no area selection |
-| Window management | Snap layouts, virtual desktops, Task View | Spaces, Mission Control | Workspaces, overview | Move, resize, maximise, snap halves, Alt+Tab, **Win+D (new)**; no virtual desktops |
+| Window management | Snap layouts, virtual desktops, Task View | Spaces, Mission Control | Workspaces, overview | Move, resize, maximise, snap halves, Alt+Tab, Win+D, **virtual desktops + Task View (2.9)** |
 | File manager | Explorer: tabs, search, previews | Finder | Files (Nautilus) | Explorer: icons/list, previews, multi-select, drag and drop, Recycle Bin, right-click menus, Properties |
 | Desktop icons | Yes | Yes | Extension | Yes, files in C:\Desktop, movable |
 | Dark mode / themes | Yes | Yes | Yes | **Dark mode (2.8)**, accent colours, wallpapers |
@@ -70,7 +70,6 @@ built into MyOS 2.7:
 
 ## What is still missing (the next steps, roughly in order)
 
-- Virtual desktops / Task View
 - Arabic and right-to-left text, and a scalable font
 - Accessibility: magnifier, high contrast, keyboard-only navigation everywhere
 - HTTPS (TLS) so the browser can open real sites

@@ -282,6 +282,7 @@ def boot1():
     calendar_tests(vm)
     v27_tests(vm)
     dark_tests(vm)
+    desktops_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -498,6 +499,35 @@ def lock_hash(pw):
     return '%08x' % h
 
 def lum(p): return (p[0] * 3 + p[1] * 6 + p[2]) // 10
+
+def desktops_tests(vm):
+    """v2.9: virtual desktops"""
+    focus_terminal(vm)
+    term = front_rect(vm)
+    vm.key('ctrl-meta_l-d'); time.sleep(0.5)
+    vm.shot('114_new_desktop', 'v2.9 Win+Ctrl+D: a new, empty desktop ("Desktop 2" shows for a moment)')
+    time.sleep(1)
+    vm.shot('114b_desktop2', 'Desktop 2: no windows on the taskbar')
+    a, b = vm_pixel(vm, '114b_desktop2', 220, 745), vm_pixel(vm, '114b_desktop2', 600, 745)
+    check('desktops', 'a new desktop starts empty (no window buttons on the taskbar)', a == b, (a, b))
+    vm.key('meta_l'); time.sleep(0.6); vm.type('clock', 0.6); vm.key('ret'); time.sleep(1.2)
+    vm.key('meta_l-tab'); time.sleep(0.8)
+    vm.shot('115_taskview', 'v2.9 Win+Tab: Task View - both desktops, their windows, a + for a new one')
+    vm.key('esc'); vm.key('ctrl-meta_l-left'); time.sleep(1.5)
+    vm.shot('116_back_to_1', 'v2.9 Win+Ctrl+Left: back to Desktop 1 - the Terminal is still here, the Clock is not')
+    check('desktops', 'each desktop keeps its own windows', front_rect(vm) == term, front_rect(vm))
+    rclick(vm, term[0] + 200, term[1] + 12)
+    vm.shot('117_move_menu', 'v2.9 right-click a title bar: Move to desktop 2')
+    vm.click(term[0] + 240, term[1] + 12 + 4 + 3 * 26 + 9 + 13); time.sleep(0.8)   # Move to desktop 2
+    vm.key('ctrl-meta_l-right'); time.sleep(1.5)
+    vm.shot('118_moved', 'v2.9 the Terminal moved to Desktop 2 (with the Clock)')
+    check('desktops', 'a window can move to another desktop', front_rect(vm) == term, front_rect(vm))
+    vm.key('ctrl-meta_l-f4'); time.sleep(1.5)
+    vm.shot('119_closed', 'v2.9 Win+Ctrl+F4 closes the desktop; its windows go to the one next to it')
+    vm.key('meta_l'); time.sleep(0.6); vm.type('clock', 0.6); vm.key('ret'); time.sleep(1)
+    vm.key('alt-f4'); time.sleep(0.5)
+    focus_terminal(vm)
+    check('desktops', 'back to one desktop with the Terminal', front_rect(vm) == term, front_rect(vm))
 
 def dark_tests(vm):
     """v2.8: dark mode"""
