@@ -395,7 +395,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
     (void)h;
     gfx_fill(x, y, w, h, C_WHITE);
     icon(APP_SYSINFO, x + 16, y + 14, 40);
-    gfx_text(x + 70, y + 18, "MyOS 2.6", C_TEXT, 1);
+    gfx_text(x + 70, y + 18, "MyOS 2.7", C_TEXT, 1);
     gfx_text(x + 70, y + 36, "32-bit x86 desktop", C_MUTED, 0);
     char b[80], *p;
     gfx_text(x + 16, y + 70, "Processor", C_MUTED, 0);
@@ -435,7 +435,7 @@ static void draw_sysinfo(int x, int y, int w, int h) {
 static void draw_about(int x, int y, int w, int h) {
     gfx_vgradient(x, y, w, 90, C_ACCENT2, C_ACCENT);
     gfx_text2x(x + 24, y + 20, "MyOS", C_WHITE);
-    gfx_text(x + 24, y + 58, "Version 2.6  -  Calendar", 0xDBEAFE, 0);
+    gfx_text(x + 24, y + 58, "Version 2.7  -  Search, notifications, lock screen", 0xDBEAFE, 0);
     gfx_fill(x, y + 90, w, h - 90, C_WHITE);
     gfx_text(x + 24, y + 106, "A Windows-style operating system", C_TEXT, 0);
     gfx_text(x + 24, y + 122, "written from scratch in C and assembly.", C_TEXT, 0);
@@ -2612,13 +2612,23 @@ static void draw_window(int app, int is_focused) {
 /* ---------- taskbar & start menu ---------- */
 #define START_W 300
 #define START_ITEM_H 29
-static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Spider", "Notes", "Contacts", "Calendar", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)", "", "Restart", "Shut down" };
-static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, -19, -20, -21, -22, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4, -1, -2, -3 };
+static const char *start_items[] = { "File Explorer", "Web", "Terminal", "Notepad", "Paint", "Music", "Pictures", "Calculator", "Snake", "Minesweeper", "Solitaire", "FreeCell", "Spider", "Notes", "Contacts", "Calendar", "Task Manager", "This PC", "Settings", "All programs (C:\\Apps)" };
+static const int start_apps[] = { APP_EXPLORER, -15, APP_TERMINAL, APP_NOTEPAD, -10, -13, -14, -16, -11, -12, -17, -18, -19, -20, -21, -22, APP_TASKMGR, APP_SYSINFO, APP_SETTINGS, -4 };
 static const char *start_programs[] = { "/Apps/paint.elf", "/Apps/snake.elf", "/Apps/mines.elf", "/Apps/music.elf", "/Apps/viewer.elf", "/Apps/web.elf", "/Apps/calc.elf", "/Apps/solitaire.elf", "/Apps/freecell.elf", "/Apps/spider.elf", "/Apps/notes.elf", "/Apps/contacts.elf", "/Apps/calendar.elf" };
-#define NSTART 23
-#define START_SEP 20
-static int start_h(void) { return 64 + NSTART * START_ITEM_H - 24; }
-static int start_item_y(int i) { int y0 = gfx_h - TASKBAR_H - start_h() + 64; return y0 + i * START_ITEM_H - (i > START_SEP ? 24 : 0); }
+#define NSTART 20
+#define START_HEAD 56                                         /* the search box */
+#define START_FOOT 44                                         /* Lock / Restart / Shut down */
+static int start_h(void) { return START_HEAD + 8 + NSTART * START_ITEM_H + 8 + START_FOOT; }
+static int start_top(void) { return gfx_h - TASKBAR_H - start_h() - 4; }
+static int start_item_y(int i) { return start_top() + START_HEAD + 8 + i * START_ITEM_H; }
+static int start_foot_y(void) { return start_top() + start_h() - START_FOOT; }
+static const char *power_names[] = { "Lock", "Restart", "Shut down" };
+/* Start menu search (type while Start is open) */
+static char sq[32];
+#define SRES_MAX 16
+struct sresult { int kind, app; char name[48]; char path[FS_PATH_MAX]; int is_dir; };   /* kind 0 Start item, 1 app, 2 file */
+static struct sresult sres[SRES_MAX];
+static int sres_n, sres_sel;
 
 static void draw_logo(int x, int y, uint32_t a, uint32_t b) {      /* MyOS mark: two overlapping rings */
     gfx_circle(x + 8, y + 10, 7, a, 0);
@@ -2627,6 +2637,7 @@ static void draw_logo(int x, int y, uint32_t a, uint32_t b) {      /* MyOS mark:
 
 static void taskbar_button_rect(int slot, int *x, int *w) { *x = 112 + slot * 128; *w = 124; }
 
+static void draw_bell(int y);
 static void draw_taskbar(void) {
     int y = gfx_h - TASKBAR_H;
     gfx_fill(0, y, gfx_w, TASKBAR_H, C_TASKBAR);
@@ -2640,7 +2651,7 @@ static void draw_taskbar(void) {
     for (int a = 0; a < NWIN; a++) {
         if (!find(a)) continue;
         int bx, bw; taskbar_button_rect(slot, &bx, &bw);
-        if (bx + bw > gfx_w - 100) break;                     /* no more room */
+        if (bx + bw > gfx_w - 140) break;                     /* no more room */
         int active = focused() == a;
         if (active || hover_key == 200 + a) gfx_rfill(bx, y + 4, bw, TASKBAR_H - 8, 6, C_TASK_HI);
         icon(a, bx + 8, y + 12, 20);
@@ -2650,6 +2661,7 @@ static void draw_taskbar(void) {
         gfx_rfill(bx + bw / 2 - (active ? 14 : 4), y + TASKBAR_H - 7, active ? 28 : 8, 3, 1, active ? C_ACCENT_HI : 0x9CA3AF);
         slot++;
     }
+    draw_bell(y);
     /* clock and date (click: Calendar) */
     if (hover_key == 101) gfx_rfill(gfx_w - 94, y + 4, 90, TASKBAR_H - 8, 6, C_TASK_HI);
     int hh, mm, ss, d, mo, yr; rtc_time(&hh, &mm, &ss); rtc_date(&d, &mo, &yr);
@@ -2660,29 +2672,346 @@ static void draw_taskbar(void) {
     gfx_text(gfx_w - 88, y + 22, dt, 0xD1D5DB, 0);
 }
 
+static void power_glyph(int x, int y, int kind, uint32_t c) {  /* kind 0 lock, 1 restart, 2 power */
+    if (kind == 0) { gfx_rfill(x + 2, y + 7, 14, 10, 2, c); gfx_circle(x + 9, y + 6, 4, c, 0); gfx_circle(x + 9, y + 6, 3, c, 0); }
+    else { gfx_circle(x + 9, y + 10, 7, c, 0); gfx_fill(x + 8, y, 3, 9, c); if (kind == 1) gfx_fill(x + 11, y + 1, 5, 3, c); }
+}
 static void draw_start_menu(void) {
-    int h = start_h(), x = 4, y = gfx_h - TASKBAR_H - h - 4;
+    int h = start_h(), x = 4, y = start_top();
     gfx_shade(x + START_W, y + 8, 6, h, 80);
     gfx_shade(x + 6, y + h, START_W - 6, 8, 80);
     gfx_rfill(x, y, START_W, h, 8, 0xF9FAFB);
-    gfx_vgradient(x, y, START_W, 56, C_ACCENT2, C_ACCENT);
-    gfx_circle(x + 30, y + 28, 16, 0xDBEAFE, 1);
-    gfx_text(x + 22, y + 20, "U", C_ACCENT2, 1);
-    gfx_text(x + 56, y + 12, "User", C_WHITE, 1);
-    gfx_text(x + 56, y + 30, "MyOS desktop", 0xBFDBFE, 0);
-    for (int i = 0; i < NSTART; i++) {
-        if (!*start_items[i]) { gfx_fill(x + 12, start_item_y(i) + 6, START_W - 24, 1, 0xD1D5DB); continue; }
-        int iy = start_item_y(i);
-        if (start_hover == i) gfx_rfill(x + 6, iy, START_W - 12, START_ITEM_H - 4, 6, C_ACCENT_LIGHT);
-        if (start_apps[i] >= 0) icon(start_apps[i], x + 16, iy + 6, 20);
-        else if (start_apps[i] == -4 || start_apps[i] <= -10) icon(APP_COUNT, x + 16, iy + 6, 20);
-        else {                                                    /* power icons */
-            uint32_t pc = start_apps[i] == -3 ? 0xDC2626 : 0xD97706;
-            gfx_circle(x + 26, iy + 16, 8, pc, 0);
-            gfx_fill(x + 25, iy + 5, 3, 9, pc);
+    gfx_vgradient(x, y, START_W, START_HEAD, C_ACCENT2, C_ACCENT);
+    /* the search box */
+    gfx_rfill(x + 12, y + 12, START_W - 24, 32, 16, C_WHITE);
+    gfx_circle(x + 30, y + 27, 6, 0x6B7280, 0); gfx_fill(x + 34, y + 32, 4, 2, 0x6B7280); gfx_fill(x + 36, y + 34, 2, 3, 0x6B7280);
+    if (sq[0]) { char t[34]; kcpy(t, sq, 30); gfx_text(x + 46, y + 20, t, C_TEXT, 0); gfx_fill(x + 46 + 8 * (int)kstrlen_(t), y + 19, 2, 18, C_ACCENT); }
+    else gfx_text(x + 46, y + 20, "Type to search apps and files", 0x9CA3AF, 0);
+    if (sq[0]) {                                              /* search results instead of the list */
+        int ry = y + START_HEAD + 8, last = -1;
+        if (!sres_n) gfx_text(x + 20, ry + 10, "Nothing found", C_MUTED, 0);
+        for (int i = 0; i < sres_n; i++) {
+            int group = sres[i].kind == 2;
+            if (group != last) { gfx_text(x + 16, ry + 4, group ? "Files" : "Apps", C_MUTED, 1); ry += 22; last = group; }
+            int hot = hover_key == 470 + i || (hover_key < 470 && i == sres_sel);
+            if (hot) gfx_rfill(x + 6, ry, START_W - 12, START_ITEM_H - 4, 6, C_ACCENT_LIGHT);
+            if (sres[i].kind == 2) {
+                if (sres[i].is_dir) { gfx_rfill(x + 16, ry + 8, 9, 4, 1, 0xD4A017); gfx_rfill(x + 16, ry + 10, 20, 12, 2, 0xF5C542); }
+                else { gfx_rfill(x + 19, ry + 5, 14, 18, 2, 0x9CA3AF); gfx_rfill(x + 20, ry + 6, 12, 16, 1, C_WHITE); }
+                char nm[20]; kcpy(nm, sres[i].name, 19);
+                gfx_text(x + 46, ry + 2, nm, C_TEXT, hot);
+                char dir[FS_PATH_MAX], show[FS_PATH_MAX]; path_resolve(sres[i].path, "..", dir); path_display(dir, show); show[30] = 0;
+                gfx_text(x + 46, ry + 14, show, C_MUTED, 0);
+            } else {
+                if (sres[i].app >= 0) icon(sres[i].app, x + 16, ry + 4, 20); else icon(APP_COUNT, x + 16, ry + 4, 20);
+                gfx_text(x + 46, ry + 6, sres[i].name, C_TEXT, hot);
+            }
+            ry += START_ITEM_H;
         }
-        gfx_text(x + 46, iy + 8, start_items[i], C_TEXT, start_hover == i);
+    } else
+        for (int i = 0; i < NSTART; i++) {
+            int iy = start_item_y(i);
+            if (start_hover == i) gfx_rfill(x + 6, iy, START_W - 12, START_ITEM_H - 4, 6, C_ACCENT_LIGHT);
+            if (start_apps[i] >= 0) icon(start_apps[i], x + 16, iy + 4, 20);
+            else icon(APP_COUNT, x + 16, iy + 4, 20);
+            gfx_text(x + 46, iy + 6, start_items[i], C_TEXT, start_hover == i);
+        }
+    /* Lock / Restart / Shut down */
+    int fy = start_foot_y(), bw = (START_W - 24) / 3;
+    gfx_fill(x + 8, fy - 4, START_W - 16, 1, 0xE5E7EB);
+    for (int b = 0; b < 3; b++) {
+        int bx = x + 12 + b * bw;
+        if (hover_key == 450 + b) gfx_rfill(bx, fy + 4, bw - 4, 32, 6, C_ACCENT_LIGHT);
+        power_glyph(bx + 8, fy + 10, b, b == 2 ? 0xDC2626 : b == 1 ? 0xD97706 : C_ACCENT);
+        gfx_text(bx + 30, fy + 12, power_names[b], C_TEXT, hover_key == 450 + b);
     }
+}
+
+
+/* ================= Start: launching and searching ================= */
+static void do_power(int kind);
+static void render(void);
+static int menu_on;                                            /* (the right-click menu, further down) */
+static void start_close(void) { start_open = 0; start_hover = -1; sq[0] = 0; sres_n = 0; dirty = 1; }
+static void start_launch(int i) {
+    int it = start_apps[i];
+    start_close();
+    if (it >= 0) open_app(it);
+    else if (it == -4) wm_open_folder("/Apps");
+    else if (it <= -10) run_program(start_programs[-10 - it]);
+}
+static int ci_has(const char *hay, const char *needle) {        /* case-insensitive "contains" */
+    for (; *hay; hay++) {
+        int k = 0;
+        while (needle[k] && (hay[k] | 32) == (needle[k] | 32)) k++;
+        if (!needle[k]) return 1;
+    }
+    return 0;
+}
+/* every file and folder on the disk (names only), rebuilt when something changes */
+#define FIDX_MAX 1500
+struct fidx_entry { char path[FS_PATH_MAX]; char is_dir; };
+static struct fidx_entry *fidx;
+static int fidx_n;
+static uint32_t fidx_gen = 0xFFFFFFFF;
+static void fidx_walk(const char *dir, int depth) {
+    if (depth > 6 || fidx_n >= FIDX_MAX) return;
+    struct fs_entry *l = kmalloc(sizeof(struct fs_entry) * 128);
+    if (!l) return;
+    int n = fs_list(dir, l, 128);
+    for (int i = 0; i < n && fidx_n < FIDX_MAX; i++) {
+        if (l[i].name[0] == '$' || !kstrcmp(l[i].name, ".") || !kstrcmp(l[i].name, "..")) continue;
+        struct fidx_entry *f = &fidx[fidx_n++];
+        path_resolve(dir, l[i].name, f->path); f->is_dir = (char)l[i].is_dir;
+        if (l[i].is_dir) { char sub[FS_PATH_MAX]; kcpy(sub, f->path, FS_PATH_MAX); fidx_walk(sub, depth + 1); }
+    }
+    kfree(l);
+}
+static void search_run(void) {
+    sres_n = 0; sres_sel = 0;
+    if (!sq[0]) return;
+    for (int i = 0; i < NSTART && sres_n < 8; i++)          /* apps first */
+        if (start_apps[i] != -4 && ci_has(start_items[i], sq)) {
+            struct sresult *r = &sres[sres_n++];
+            r->kind = 0; r->app = start_apps[i] >= 0 ? start_apps[i] : -1; kcpy(r->name, start_items[i], 48); r->path[0] = 0;
+            r->is_dir = i;                                    /* which Start item */
+        }
+    static const int extra_apps[] = { APP_CLOCK, APP_ABOUT };
+    for (int k = 0; k < 2 && sres_n < 8; k++)
+        if (ci_has(app_titles[extra_apps[k]], sq)) {
+            struct sresult *r = &sres[sres_n++];
+            r->kind = 1; r->app = extra_apps[k]; kcpy(r->name, app_titles[extra_apps[k]], 48); r->path[0] = 0;
+        }
+    if (ci_has("Recycle Bin", sq) && sres_n < 8) {
+        struct sresult *r = &sres[sres_n++];
+        r->kind = 1; r->app = -1; kcpy(r->name, "Recycle Bin", 48); kcpy(r->path, BIN, FS_PATH_MAX);
+    }
+    if (!fs_mounted()) return;
+    if (!fidx) fidx = kmalloc(sizeof(struct fidx_entry) * FIDX_MAX);
+    if (!fidx) return;
+    if (fidx_gen != fs_generation) { fidx_n = 0; fidx_walk("/", 0); fidx_gen = fs_generation; }
+    for (int i = 0; i < fidx_n && sres_n < SRES_MAX; i++)
+        if (ci_has(base_name(fidx[i].path), sq)) {
+            struct sresult *r = &sres[sres_n++];
+            r->kind = 2; r->app = -1; kcpy(r->name, base_name(fidx[i].path), 48);
+            kcpy(r->path, fidx[i].path, FS_PATH_MAX); r->is_dir = fidx[i].is_dir;
+        }
+}
+static void search_open(int i) {
+    if (i < 0 || i >= sres_n) return;
+    struct sresult r = sres[i];
+    start_close();
+    if (r.kind == 0) { start_launch(r.is_dir); return; }
+    if (r.kind == 1) { if (r.path[0]) { open_app(APP_EXPLORER); ex_go(r.path); } else open_app(r.app); return; }
+    open_path(r.path, r.is_dir);
+}
+static int start_key(int k) {                                  /* keys while Start is open; 1 = used */
+    int n = kstrlen_(sq);
+    if (k >= 32 && k < 127) { if (n < 30) { sq[n] = (char)k; sq[n + 1] = 0; search_run(); } dirty = 1; return 1; }
+    if (k == '\b') { if (n) { sq[n - 1] = 0; search_run(); } dirty = 1; return 1; }
+    if (k == KEY_ESC) { if (n) { sq[0] = 0; sres_n = 0; } else start_close(); dirty = 1; return 1; }
+    if (k == KEY_DOWN && sq[0]) { if (sres_sel < sres_n - 1) sres_sel++; dirty = 1; return 1; }
+    if (k == KEY_UP && sq[0]) { if (sres_sel > 0) sres_sel--; dirty = 1; return 1; }
+    if (k == '\n') { if (sq[0]) search_open(sres_sel); return 1; }
+    return 0;
+}
+
+/* ================= notifications ================= */
+#define NOTICE_MAX 20
+struct notice { char title[40]; char text[72]; char path[FS_PATH_MAX]; char when[6]; };
+static struct notice notices[NOTICE_MAX];
+static int nnotice, unread, toast_on, center_open;
+static uint32_t toast_until;
+#define TOAST_W 340
+#define TOAST_H 76
+#define CENTER_W 360
+void wm_notify(const char *title, const char *text, const char *path) {
+    for (int i = (nnotice < NOTICE_MAX ? nnotice : NOTICE_MAX - 1); i > 0; i--) notices[i] = notices[i - 1];
+    if (nnotice < NOTICE_MAX) nnotice++;
+    struct notice *n = &notices[0];
+    kcpy(n->title, title, 40); kcpy(n->text, text ? text : "", 72); kcpy(n->path, path ? path : "", FS_PATH_MAX);
+    int h, m, sec; rtc_time(&h, &m, &sec); kcpy(n->when, "00:00", 6); two_digits(n->when, h); two_digits(n->when + 3, m);
+    unread++;
+    toast_on = !center_open; toast_until = ticks + 6 * TIMER_HZ;
+    dirty = 1;
+}
+static void notice_open(int i) {                               /* clicked: open what it is about */
+    if (i < 0 || i >= nnotice) return;
+    char p[FS_PATH_MAX]; kcpy(p, notices[i].path, FS_PATH_MAX);
+    toast_on = 0; center_open = 0; dirty = 1;
+    if (p[0]) open_path(p, fs_stat(p, 0) == 2);
+}
+static int toast_y(void) { return gfx_h - TASKBAR_H - TOAST_H - 12; }
+static void draw_notice(int x, int y, int w, struct notice *n, int hot) {
+    gfx_rfill(x, y, w, TOAST_H - 8, 8, hot ? 0xEFF6FF : C_WHITE);
+    gfx_rfill(x + 12, y + 12, 32, 32, 8, C_ACCENT);            /* a bell */
+    gfx_circle(x + 28, y + 26, 7, C_WHITE, 1); gfx_fill(x + 21, y + 26, 15, 7, C_WHITE); gfx_fill(x + 26, y + 34, 5, 3, C_WHITE);
+    char t[34]; kcpy(t, n->title, (w - 110) / 8 < 33 ? (w - 110) / 8 : 33);
+    gfx_text(x + 56, y + 10, t, C_TEXT, 1);
+    gfx_text(x + w - 52, y + 10, n->when, C_MUTED, 0);
+    char b[48]; kcpy(b, n->text, (w - 64) / 8 < 47 ? (w - 64) / 8 : 47);
+    gfx_text(x + 56, y + 32, b, C_MUTED, 0);
+    if ((int)kstrlen_(n->text) > (w - 64) / 8) { kcpy(b, n->text + (w - 64) / 8, (w - 64) / 8 < 47 ? (w - 64) / 8 : 47); gfx_text(x + 56, y + 48, b, C_MUTED, 0); }
+}
+static void draw_toast(void) {
+    int x = gfx_w - TOAST_W - 12, y = toast_y();
+    gfx_noclip();
+    gfx_shade(x + 4, y + 6, TOAST_W, TOAST_H - 8, 70);
+    draw_notice(x, y, TOAST_W, &notices[0], hover_key == 103);
+}
+static int center_rows(void) { int r = nnotice < 6 ? nnotice : 6; return r; }
+static int center_h(void) { return 56 + (center_rows() ? center_rows() * TOAST_H : 50); }
+static int center_y(void) { return gfx_h - TASKBAR_H - center_h() - 8; }
+static void draw_center(void) {
+    int x = gfx_w - CENTER_W - 8, y = center_y(), h = center_h();
+    gfx_noclip();
+    gfx_shade(x + 6, y + 8, CENTER_W, h, 80);
+    gfx_rfill(x, y, CENTER_W, h, 10, 0xF3F4F6);
+    gfx_text(x + 16, y + 16, "Notifications", C_TEXT, 1);
+    if (nnotice) {
+        if (hover_key == 104) gfx_rfill(x + CENTER_W - 100, y + 10, 88, 28, 6, 0xE5E7EB);
+        gfx_text(x + CENTER_W - 92, y + 16, "Clear all", C_ACCENT, 0);
+    }
+    if (!nnotice) gfx_text(x + 16, y + 60, "No new notifications", C_MUTED, 0);
+    for (int i = 0; i < center_rows(); i++) draw_notice(x + 8, y + 48 + i * TOAST_H, CENTER_W - 16, &notices[i], hover_key == 110 + i);
+}
+static int bell_x(void) { return gfx_w - 136; }
+static void draw_bell(int y) {
+    int x = bell_x();
+    if (hover_key == 102 || center_open) gfx_rfill(x, y + 4, 36, TASKBAR_H - 8, 6, C_TASK_HI);
+    gfx_circle(x + 18, y + 20, 7, C_WHITE, 1); gfx_fill(x + 11, y + 20, 15, 8, C_WHITE);
+    gfx_fill(x + 9, y + 27, 19, 2, C_WHITE); gfx_fill(x + 16, y + 30, 5, 3, C_WHITE);
+    if (unread) {
+        char n[4]; utoa(n, unread > 9 ? 9 : unread);
+        gfx_circle(x + 28, y + 12, 7, 0xDC2626, 1);
+        gfx_text(x + 25, y + 4, n, C_WHITE, 0);
+    }
+}
+
+/* ================= calendar reminders ================= */
+/* Every minute (and whenever the disk changes): events in C:\Calendar\Events.txt today,
+ * 10 minutes before and when they start. Each reminder is given once. */
+static uint32_t told[48]; static int ntold, told_day;
+static int told_once(uint32_t key) {
+    for (int i = 0; i < ntold; i++) if (told[i] == key) return 0;
+    if (ntold == 48) ntold = 0;
+    told[ntold++] = key;
+    return 1;
+}
+static void check_reminders(void) {
+    static int last = -1;
+    static uint32_t last_gen;
+    int h, m, sec; rtc_time(&h, &m, &sec);
+    int now = h * 60 + m;
+    if ((now == last && last_gen == fs_generation) || !fs_mounted()) return;
+    last = now; last_gen = fs_generation;
+    int d, mo, y; rtc_date(&d, &mo, &y);
+    if (d != told_day) { ntold = 0; told_day = d; }
+    static char buf[16384];
+    int n = fs_read("/Calendar/Events.txt", buf, sizeof buf - 1);
+    if (n <= 0) return;
+    buf[n] = 0;
+    for (char *p = buf; *p; ) {
+        char *e = p; while (*e && *e != '\n') e++;
+        if (e - p >= 18 && p[4] == '-' && p[7] == '-' && p[13] == ':') {
+            int ey = (p[0] - '0') * 1000 + (p[1] - '0') * 100 + (p[2] - '0') * 10 + p[3] - '0', em = (p[5] - '0') * 10 + p[6] - '0', ed = (p[8] - '0') * 10 + p[9] - '0';
+            int eh = (p[11] - '0') * 10 + p[12] - '0', emin = (p[14] - '0') * 10 + p[15] - '0';
+            if (ey == y && em == mo && ed == d && p[11] != '-') {
+                int t = eh * 60 + emin;
+                char title[48]; int k = 0;
+                for (char *q = p + 17; q < e && *q != '\r' && k < 47; q++) title[k++] = *q;
+                title[k] = 0;
+                char text[72], tm[6] = "00:00"; two_digits(tm, eh); two_digits(tm + 3, emin);
+                uint32_t key = (uint32_t)t * 2654435761u;
+                for (char *q = title; *q; q++) key = key * 31 + (uint8_t)*q;
+                if (t - now == 10 && told_once(key)) { char *q = cat(text, "In 10 minutes, at "); cat(q, tm); wm_notify(title, text, "/Apps/calendar.elf"); }
+                if (t == now && told_once(key + 1)) { char *q = cat(text, "Starting now ("); q = cat(q, tm); cat(q, ")"); wm_notify(title, text, "/Apps/calendar.elf"); }
+            }
+        }
+        p = *e ? e + 1 : e;
+    }
+}
+
+/* ================= screenshots ================= */
+void wm_screenshot(void) {
+    render();
+    int len = 0;
+    uint8_t *png = png_encode(gfx_backbuffer(), gfx_w, gfx_h, &len);
+    if (!png) { wm_notify("Screenshot not saved", "There was not enough memory", 0); return; }
+    if (fs_stat("/Pictures", 0) != 2) fs_mkdir("/Pictures");
+    if (fs_stat("/Pictures/Screenshots", 0) != 2) fs_mkdir("/Pictures/Screenshots");
+    int h, m, sec, d, mo, y; rtc_time(&h, &m, &sec); rtc_date(&d, &mo, &y);
+    char name[48] = "Screenshot 2000-00-00 000000.png", path[FS_PATH_MAX];
+    utoa(name + 11, y); name[15] = '-'; two_digits(name + 16, mo); two_digits(name + 19, d);
+    two_digits(name + 22, h); two_digits(name + 24, m); two_digits(name + 26, sec);
+    path_resolve("/Pictures/Screenshots", name, path);
+    int ok = fs_write(path, png, len);
+    kfree(png);
+    char text[72], *q = cat(text, "C:\\Pictures\\Screenshots\\"); kcpy(q, name, 72 - 24);
+    wm_notify(ok ? "Screenshot saved" : "Screenshot not saved", ok ? text : "The disk may be full", ok ? path : 0);
+}
+
+/* ================= lock screen ================= */
+static int locked, lock_err;
+static char lock_pw[32];
+void wm_lock(void) { locked = 1; lock_pw[0] = 0; lock_err = 0; start_close(); menu_on = 0; center_open = 0; toast_on = 0; dirty = 1; }
+static void unlock_try(void) {
+    if (cfg.password[0]) {
+        char h[12]; password_hash(lock_pw, h);
+        if (kstrcmp(h, cfg.password)) { lock_err = 1; lock_pw[0] = 0; dirty = 1; return; }
+    }
+    locked = 0; lock_pw[0] = 0; lock_err = 0; dirty = 1;
+}
+static int week_day(int y, int m, int d) {
+    static const int t[] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
+    if (m < 3) y--;
+    return (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
+}
+static void draw_lock(void) {
+    gfx_restore(wallpaper);
+    gfx_shade(0, 0, gfx_w, gfx_h, 120);
+    int h, m, sec, d, mo, y; rtc_time(&h, &m, &sec); rtc_date(&d, &mo, &y);
+    char t[6] = "00:00"; two_digits(t, h); two_digits(t + 3, m);
+    gfx_text_scaled(gfx_w / 2 - 5 * 48 / 2, 120, t, C_WHITE, 6);
+    static const char *days[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    static const char *months[] = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+    char date[48], *q = cat(date, days[week_day(y, mo, d)]); q = cat(q, ", "); q = utoa(q, d); q = cat(q, " "); cat(q, months[mo - 1]);
+    gfx_text2x(gfx_w / 2 - (int)kstrlen_(date) * 8, 236, date, 0xE5E7EB);
+    int cy = 400;
+    gfx_circle(gfx_w / 2, cy, 40, 0xDBEAFE, 1);
+    gfx_text2x(gfx_w / 2 - 8, cy - 16, "U", C_ACCENT2);
+    gfx_text2x(gfx_w / 2 - 32, cy + 52, "User", C_WHITE);
+    int by = cy + 104;
+    if (cfg.password[0]) {
+        gfx_rfill(gfx_w / 2 - 150, by, 300, 40, 8, C_WHITE);
+        int n = kstrlen_(lock_pw);
+        if (!n) gfx_text(gfx_w / 2 - 136, by + 12, "Password", 0x9CA3AF, 0);
+        for (int i = 0; i < n && i < 30; i++) gfx_circle(gfx_w / 2 - 132 + i * 14, by + 20, 4, C_TEXT, 1);
+        gfx_fill(gfx_w / 2 - 136 + n * 14 + (n ? 2 : 0), by + 10, 2, 20, C_ACCENT);
+        const char *hint = lock_err ? "Wrong password - try again" : "Type your password and press Enter";
+        gfx_text(gfx_w / 2 - (int)kstrlen_(hint) * 4, by + 54, hint, lock_err ? 0xFCA5A5 : 0xD1D5DB, lock_err);
+    } else {
+        const char *hint = "Click or press Enter to unlock";
+        gfx_text(gfx_w / 2 - (int)kstrlen_(hint) * 4, by + 12, hint, 0xD1D5DB, 1);
+    }
+}
+static void lock_key(int k) {
+    int n = kstrlen_(lock_pw);
+    if (k == '\n') unlock_try();
+    else if (k == '\b') { if (n) lock_pw[n - 1] = 0; }
+    else if (k == KEY_ESC) lock_pw[0] = 0;
+    else if (k >= 32 && k < 127 && n < 30) { lock_pw[n] = (char)k; lock_pw[n + 1] = 0; lock_err = 0; }
+    dirty = 1;
+}
+
+/* ================= Win+D: show the desktop ================= */
+static void show_desktop(void) {
+    static int hidden[NWIN], nhidden;
+    int any = 0;
+    for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized) any = 1;
+    if (any) { nhidden = 0; for (int i = 0; i < nwin; i++) if (!wins[zorder[i]].minimized) { wins[zorder[i]].minimized = 1; hidden[nhidden++] = zorder[i]; } }
+    else { for (int i = 0; i < nhidden; i++) if (find(hidden[i])) wins[hidden[i]].minimized = 0; nhidden = 0; }
+    dirty = 1;
 }
 
 /* a desktop file or folder, 40 x 40 */
@@ -2789,6 +3118,7 @@ static int dd_over_bin(void) {
 
 /* ---------- full redraw ---------- */
 static void render(void) {
+    if (locked) { draw_lock(); gfx_present(); gfx_cursor_move(mx, my); return; }
     gfx_restore(wallpaper);
     for (int i = 0; i < nicons(); i++) {
         int x, y; icon_rect(i, &x, &y);
@@ -2825,6 +3155,8 @@ static void render(void) {
     }
     draw_taskbar();
     if (start_open) draw_start_menu();
+    if (center_open) draw_center();
+    else if (toast_on && nnotice) draw_toast();
     if (menu_on) draw_menu();
     if (dd_on) {                                               /* the label that follows the pointer */
         char label[64], dest[FS_PATH_MAX], t[96];
@@ -3179,15 +3511,36 @@ static void menu_key(int k) {
 }
 
 static int compute_hover(void) {
+    if (locked) return -1;
     if (menu_on) { int r = menu_at(mx, my); if (r != -1) return r >= 0 ? 900 + r : 899; }
+    if (center_open) {                                         /* the notification centre */
+        int x = gfx_w - CENTER_W - 8, y = center_y();
+        if (inside(mx, my, x, y, CENTER_W, center_h())) {
+            if (nnotice && inside(mx, my, x + CENTER_W - 100, y + 10, 88, 28)) return 104;
+            for (int i = 0; i < center_rows(); i++) if (inside(mx, my, x + 8, y + 48 + i * TOAST_H, CENTER_W - 16, TOAST_H - 8)) return 110 + i;
+            return 105;
+        }
+    } else if (toast_on && nnotice && inside(mx, my, gfx_w - TOAST_W - 12, toast_y(), TOAST_W, TOAST_H - 8)) return 103;
     if (start_open) {
         int x = 4;
-        for (int i = 0; i < NSTART; i++)
-            if (*start_items[i] && inside(mx, my, x, start_item_y(i), START_W, START_ITEM_H - 4)) return 400 + i;
+        int fy = start_foot_y(), bw = (START_W - 24) / 3;
+        for (int b = 0; b < 3; b++) if (inside(mx, my, x + 12 + b * bw, fy + 4, bw - 4, 32)) return 450 + b;
+        if (sq[0]) {
+            int ry = start_top() + START_HEAD + 8, last = -1;
+            for (int i = 0; i < sres_n; i++) {
+                int group = sres[i].kind == 2;
+                if (group != last) { ry += 22; last = group; }
+                if (inside(mx, my, x, ry, START_W, START_ITEM_H - 4)) return 470 + i;
+                ry += START_ITEM_H;
+            }
+        } else
+            for (int i = 0; i < NSTART; i++)
+                if (inside(mx, my, x, start_item_y(i), START_W, START_ITEM_H - 4)) return 400 + i;
     }
     if (my >= gfx_h - TASKBAR_H) {
         if (mx < 108) return 100;
-        if (mx >= gfx_w - 96) return 101;                      /* the clock: opens Calendar */
+        if (mx >= gfx_w - 96) return 101;
+        if (mx >= bell_x() && mx < bell_x() + 36) return 102;   /* notifications */                      /* the clock: opens Calendar */
         int slot = 0;
         for (int a = 0; a < NWIN; a++) {
             if (!find(a)) continue;
@@ -3236,19 +3589,24 @@ static void do_power(int kind) {
 
 static void left_click(void) {
     desk_focus = 0;                                            /* set again below if the click is on the desktop */
+    if (hover_key == 103) { notice_open(0); return; }          /* the pop-up */
+    if (center_open) {
+        if (hover_key == 104) { nnotice = 0; unread = 0; dirty = 1; return; }   /* Clear all */
+        if (hover_key >= 110 && hover_key < 120) { notice_open(hover_key - 110); return; }
+        if (hover_key == 105) return;
+        if (hover_key != 102) { center_open = 0; dirty = 1; }
+    }
+    if (hover_key == 102) {                                    /* the bell */
+        center_open = !center_open; unread = 0; toast_on = 0; start_close(); dirty = 1; return;
+    }
     /* Start menu */
     if (start_open) {
         int h = hover_key;
-        if (h >= 400) {
-            int it = start_apps[h - 400];
-            start_open = 0; start_hover = -1; dirty = 1;
-            if (it >= 0) open_app(it);
-            else if (it == -4) wm_open_folder("/Apps");
-            else if (it <= -10) run_program(start_programs[-10 - it]);
-            else do_power(it);
-            return;
-        }
-        if (!(my >= gfx_h - TASKBAR_H && mx < 108)) { start_open = 0; dirty = 1; }
+        if (h >= 400 && h < 400 + NSTART) { start_launch(h - 400); return; }
+        if (h >= 450 && h < 453) { start_close(); if (h == 450) wm_lock(); else do_power(h == 451 ? -2 : -3); return; }
+        if (h >= 470 && h < 470 + SRES_MAX) { search_open(h - 470); return; }
+        if (inside(mx, my, 4, start_top(), START_W, start_h())) return;   /* on the menu, not on an item */
+        if (!(my >= gfx_h - TASKBAR_H && mx < 108)) start_close();
     }
     /* Taskbar */
     if (my >= gfx_h - TASKBAR_H) {
@@ -3331,6 +3689,7 @@ void wm_init(void) {
     if (fs_mounted() && fs_stat(DESK_DIR, 0) != 2) fs_mkdir(DESK_DIR);   /* the desktop's own folder */
     ex_go("/");
     open_app(APP_TERMINAL);
+    if (cfg.password[0]) locked = 1;                           /* a password: start at the lock screen */
     dirty = 1;
 }
 
@@ -3346,6 +3705,11 @@ void wm_mouse(int dx, int dy, int buttons) {
     if (my < 0) my = 0;
     if (my >= gfx_h) my = gfx_h - 1;
     cursor_moved = 1;
+    if (locked) {                                              /* only the lock screen is there */
+        if ((buttons & 1) && !(mbuttons & 1) && !cfg.password[0]) unlock_try();
+        mbuttons = buttons;
+        return;
+    }
 
     if (resizing >= 0 && (dx || dy)) resize_to_mouse();
     if (drag >= 0 && (dx || dy)) {
@@ -3369,7 +3733,7 @@ void wm_mouse(int dx, int dy, int buttons) {
     }
     int hv = compute_hover();
     if (hv != hover_key) {
-        hover_key = hv; start_hover = hv >= 400 ? hv - 400 : -1; dirty = 1;
+        hover_key = hv; start_hover = hv >= 400 && hv < 400 + NSTART ? hv - 400 : -1; dirty = 1;
         if (menu_on && hv >= 900 && hv < 900 + MENU_MAX) menu_hot = hv - 900;
     }
 
@@ -3438,7 +3802,14 @@ void wm_mouse(int dx, int dy, int buttons) {
 }
 
 void wm_key(int k) {
+    if (locked) { lock_key(k); return; }
+    if (k == KEY_LOCK) { wm_lock(); return; }
+    if (k == KEY_PRTSC) { wm_screenshot(); return; }
+    if (k == KEY_WIN_E) { start_close(); open_app(APP_EXPLORER); return; }
+    if (k == KEY_WIN_D) { start_close(); show_desktop(); return; }
+    if (center_open && k == KEY_ESC) { center_open = 0; dirty = 1; return; }
     if (menu_on) { menu_key(k); return; }
+    if (start_open && k != KEY_START && k != KEY_F1 && start_key(k)) return;
     if (k == KEY_MENU && focused() == APP_EXPLORER && find(APP_EXPLORER)) {   /* the Menu key: menu for the selection */
         struct window *w = &wins[APP_EXPLORER];
         int sx = mx, sy = my, cw = w->w - 2;
@@ -3450,8 +3821,7 @@ void wm_key(int k) {
         mx = sx; my = sy; dirty = 1;
         return;
     }
-    if (k == KEY_START || k == KEY_F1) { start_open = !start_open; dirty = 1; return; }
-    if (k == KEY_ESC && start_open) { start_open = 0; dirty = 1; return; }
+    if (k == KEY_START || k == KEY_F1) { if (start_open) start_close(); else { start_open = 1; center_open = 0; } dirty = 1; return; }
     if (k == KEY_ALTF4) {                                      /* close the window in front (programs end) */
         int a = focused();
         if (a >= 0) { if (is_proc(a)) proc_kill(tasks[proc_slot(a)].pid); else close_app(a); }
@@ -3504,7 +3874,13 @@ uint32_t wm_bench(int frames) {
 void wm_tick(void) { caret_on = !caret_on; cpu_sample(); dirty = 1; }
 
 void wm_update(void) {
-    static uint32_t last_render;
+    static uint32_t last_render, last_second;
+    if (ticks - last_second >= TIMER_HZ) {                     /* once a second */
+        last_second = ticks;
+        check_reminders();
+        if (locked) dirty = 1;                                 /* the lock screen's clock */
+    }
+    if (toast_on && (int)(ticks - toast_until) > 0) { toast_on = 0; dirty = 1; }
     if (con_dirty && find(APP_TERMINAL)) dirty = 1;
     /* Redraw at most ~30 times a second, so animations don't eat the CPU. */
     static int bg_full;               /* a partly hidden program window changed */

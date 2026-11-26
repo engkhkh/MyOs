@@ -293,7 +293,7 @@ int main(void) {
                 if (r == 0) delete_current();
                 if (r >= 0) ask_delete = 0;
             } else if (about) {
-                if (ui_dialog("About Contacts", "Contacts for MyOS 2.6", "Saved in C:\\Contacts\\Contacts.txt", "OK", 0) >= 0) about = 0;
+                if (ui_dialog("About Contacts", "Contacts for MyOS 2.7", "Saved in C:\\Contacts\\Contacts.txt", "OK", 0) >= 0) about = 0;
             }
         }
         ui_present();

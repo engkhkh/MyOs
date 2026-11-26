@@ -120,7 +120,13 @@ static void check_runs(void) {                     /* a full King..Ace run of on
             draw_all(); ui_present(); sleep(120);
         }
     }
-    if (g.ndone == 8 && !g.won) { g.won = 1; g.end = ticks(); show_won = 1; celebrate_pending = 1; }
+    if (g.ndone == 8 && !g.won) {
+        g.won = 1; g.end = ticks(); show_won = 1; celebrate_pending = 1;
+        char m[48] = "You won with a score of ", num[12]; int k = strlen(m);
+        utoa(g.score, num); for (int q = 0; num[q]; q++) m[k++] = num[q];
+        m[k] = 0;
+        notify("Spider Solitaire", m);                        /* shows up in the notification centre too */
+    }
 }
 static int try_move(int from, int i, int to) {
     if (!legal(from, i, to)) return 0;

@@ -28,6 +28,10 @@ static inline int sys(int n, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uin
 #define KEY_ALTTAB 0x10F
 #define KEY_ALTENTER 0x110
 #define KEY_MENU 0x111
+#define KEY_PRTSC 0x112               /* Print Screen: a screenshot */
+#define KEY_LOCK  0x113               /* Win+L */
+#define KEY_WIN_E 0x114               /* Win+E */
+#define KEY_WIN_D 0x115               /* Win+D */
 #define KEY_CTRL(c) (0x200 | (c))
 
 static inline void exit(int code)            { sys(SYS_EXIT, code, 0, 0, 0, 0); }
@@ -86,6 +90,7 @@ static inline void resizable(int min_w, int min_h) { sys(SYS_RESIZABLE, (uint32_
 static inline int clipget(char *buf, int max)       { return sys(SYS_CLIPGET, (uint32_t)buf, (uint32_t)max, 0, 0, 0); }
 static inline int deletefile(const char *p)  { return sys(SYS_DELETE, (uint32_t)p, 0, 0, 0, 0); }
 static inline int makedir(const char *p)     { return sys(SYS_MKDIR, (uint32_t)p, 0, 0, 0, 0); }
+static inline void notify(const char *title, const char *text) { sys(SYS_NOTIFY, (uint32_t)title, (uint32_t)text, 0, 0, 0); }
 
 /* Memory: provided by malloc.c, which is linked into every program. */
 void *malloc(uint32_t size);

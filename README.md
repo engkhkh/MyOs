@@ -1,6 +1,6 @@
 # MyOS — a Windows-style OS built from scratch
 
-Version 2.6 (stage 26: Calendar). A 32-bit x86 operating system with a graphical
+Version 2.7 (stage 27: ideas from Windows, macOS and Ubuntu - search, notifications, screenshots, lock screen). See docs/COMPARISON.md for how MyOS compares with them. A 32-bit x86 operating system with a graphical
 desktop (1024x768, mouse, draggable windows, taskbar, Start menu), a FAT32 drive C:,
 and real programs: they are loaded from disk, run in user mode (ring 3) in their own
 protected memory, and share the CPU through preemptive multitasking.
@@ -131,6 +131,20 @@ disk.img as an IDE hard disk (convert first: `VBoxManage convertfromraw disk.img
   Game menu: New game (F2), Undo (Ctrl+Z, many steps), Finish, Draw 1 / Draw 3. Score,
   moves and time at the bottom; when every card is face up it finishes by itself - and
   winning ends with the bouncing cards
+- **Search from Start**: open Start (Windows key or the Start button) and just type -
+  apps first, then files and folders anywhere on C:. Up/Down + Enter, or click.
+- **Notifications**: pop-ups at the bottom right, and the bell on the taskbar keeps the
+  last 20 (red count of unread, Clear all). Clicking one opens what it is about.
+  Programs can send them (`notify(title, text)`, system call 43); Terminal: `notify <text>`
+- **Calendar reminders**: 10 minutes before an event and when it starts, even when
+  Calendar is closed
+- **Screenshots**: Print Screen saves the screen as a PNG in C:\Pictures\Screenshots
+  (also the `screenshot` command)
+- **Lock screen**: Win+L, Start > Lock, or `lock`. Set a password with
+  `password <new>` (then MyOS also starts locked); `password off` removes it. Only a hash
+  is kept in settings.ini - it keeps a curious person out, it is not strong security
+- **Windows-key shortcuts**: Win (opens Start when let go), Win+E File Explorer,
+  Win+D show the desktop (again to bring the windows back), Win+L lock
 - **Calendar** (Start > Calendar, `calendar`, or click the clock on the taskbar): a month
   view with today circled and each day's events as coloured labels. Click a day (or use
   the arrow keys) to see its events on the right; type a time (9, 930, 14:30 - or nothing
@@ -273,5 +287,6 @@ stack, its heap grows on demand, and it can't touch the kernel or other programs
 24. ✅ Spider Solitaire (1, 2 or 4 suits, hints, undo) and movable desktop icons
 25. ✅ Notes and Contacts apps; multi-line text widget; delete-file / make-folder system calls
 26. ✅ Calendar (month view, events, opens from the taskbar clock); the date now follows the time zone
-27. More apps (a text-based Mail, Photos), HTTPS (TLS)
-28. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches
+27. ✅ Compared with Windows / macOS / Ubuntu (docs/COMPARISON.md): Start search, notifications, reminders, screenshots, lock screen, Win+E / Win+D
+28. Dark mode, virtual desktops, Arabic / right-to-left, HTTPS (TLS)
+29. 64-bit, USB keyboard/mouse/touchpad, AHCI/NVMe disks; ARM port for watches

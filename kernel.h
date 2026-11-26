@@ -78,6 +78,10 @@ void kfree(void *p);
 #define KEY_ALTTAB 0x10F
 #define KEY_ALTENTER 0x110            /* Alt+Enter: Properties */
 #define KEY_MENU  0x111               /* the Menu key (right-click menu) */
+#define KEY_PRTSC 0x112               /* Print Screen: a screenshot */
+#define KEY_LOCK  0x113               /* Win+L */
+#define KEY_WIN_E 0x114               /* Win+E */
+#define KEY_WIN_D 0x115               /* Win+D */
 #define KEY_CTRL(c) (0x200 | (c))           /* Ctrl + letter, e.g. KEY_CTRL('s') */
 
 /* kernel.c */
@@ -124,6 +128,13 @@ void gfx_circle(int cx, int cy, int r, uint32_t c, int filled);
 void gfx_char(int x, int y, char ch, uint32_t c, int bold);
 void gfx_text(int x, int y, const char *s, uint32_t c, int bold);
 void gfx_text2x(int x, int y, const char *s, uint32_t c);
+void wm_notify(const char *title, const char *text, const char *path);
+void wm_lock(void);
+void wm_screenshot(void);
+void gfx_text_scaled(int x, int y, const char *s, uint32_t c, int scale);
+const uint32_t *gfx_backbuffer(void);
+/* png_write.c */
+uint8_t *png_encode(const uint32_t *px, int w, int h, int *len);
 uint32_t gfx_blend(uint32_t a, uint32_t b, int t, int n);
 uint32_t *gfx_snapshot(void);
 void gfx_restore(const uint32_t *s);
@@ -268,11 +279,13 @@ int proc_current(void);
 struct settings {
     int wallpaper; char picture[FS_PATH_MAX];
     int accent, timezone, volume, chime, mouse; int explorer_view; /* mouse speed 1 slow .. 4 fastest */
+    char password[12];                       /* "" = no password; else a hash in hex (see shell "password") */
 };
 extern struct settings cfg;
 void settings_load(void);
 int settings_save(void);
 void settings_apply(void);
+void password_hash(const char *pw, char out[12]);
 
 /* wm.c - desktop / window manager */
 void wm_init(void);

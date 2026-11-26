@@ -16,7 +16,7 @@
 
 #define FILE "/settings.ini"
 
-struct settings cfg = { 0, "", 0, 0, 100, 1, 2, 1 };
+struct settings cfg = { 0, "", 0, 0, 100, 1, 2, 1, "" };
 
 static int starts(const char *s, const char *p) { while (*p) if (*s++ != *p++) return 0; return 1; }
 static int num(const char *s) { int neg = 0, v = 0; if (*s == '-') { neg = 1; s++; } else if (*s == '+') s++; while (*s >= '0' && *s <= '9') v = v * 10 + *s++ - '0'; return neg ? -v : v; }
@@ -39,6 +39,7 @@ void settings_load(void) {
         else if (starts(l, "chime=")) cfg.chime = num(l + 6) != 0;
         else if (starts(l, "mouse=")) cfg.mouse = clamp(num(l + 6), 1, 4);
         else if (starts(l, "explorer_view=")) cfg.explorer_view = clamp(num(l + 14), 0, 1);
+        else if (starts(l, "password=")) { int k = 0; for (char *v = l + 9; *v && k < 11; v++) cfg.password[k++] = *v; cfg.password[k] = 0; }
         *e = save;
         l = e; while (*l == '\n' || *l == '\r') l++;
     }
@@ -64,6 +65,7 @@ int settings_save(void) {
     p = put(p, "chime="); p = putn(p, cfg.chime); p = put(p, "\r\n");
     p = put(p, "mouse="); p = putn(p, cfg.mouse); p = put(p, "\r\n");
     p = put(p, "explorer_view="); p = putn(p, cfg.explorer_view); p = put(p, "\r\n");
+    if (cfg.password[0]) { p = put(p, "password="); p = put(p, cfg.password); p = put(p, "\r\n"); }
     return fs_write(FILE, buf, p - buf);
 }
 
@@ -71,4 +73,16 @@ int settings_save(void) {
 void settings_apply(void) {
     rtc_set_tz(cfg.timezone);
     sound_set_volume(cfg.volume);
+}
+
+/* The lock-screen password is never stored as typed: only this hash of it (FNV-1a, 32 bits,
+ * as 8 hex digits). It keeps a curious person at the keyboard out - it is not strong
+ * encryption, and anyone who can read the disk directly can get past it. */
+void password_hash(const char *pw, char out[12]) {
+    uint32_t h = 2166136261u;
+    const char *salt = "MyOS lock:";
+    for (const char *p = salt; *p; p++) { h ^= (uint8_t)*p; h *= 16777619u; }
+    for (const char *p = pw; *p; p++) { h ^= (uint8_t)*p; h *= 16777619u; }
+    for (int i = 0; i < 8; i++) out[i] = "0123456789abcdef"[(h >> (28 - i * 4)) & 15];
+    out[8] = 0;
 }

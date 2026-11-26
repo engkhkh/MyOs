@@ -203,6 +203,18 @@ void gfx_text2x(int x, int y, const char *s, uint32_t c) {
     }
 }
 
+/* Text at any whole-number size (the lock screen's big clock). */
+void gfx_text_scaled(int x, int y, const char *s, uint32_t c, int scale) {
+    for (; *s; s++, x += 8 * scale) {
+        const uint8_t *gl = font_bold[(uint8_t)*s & 127];
+        for (int j = 0; j < 16; j++)
+            for (int i = 0; i < 8; i++)
+                if (gl[j] & (0x80 >> i)) gfx_fill(x + i * scale, y + j * scale, scale, scale, c);
+    }
+}
+/* The finished picture (for screenshots). */
+const uint32_t *gfx_backbuffer(void) { return back; }
+
 /* Save / restore the whole back buffer (for a pre-rendered wallpaper). */
 uint32_t *gfx_snapshot(void) {
     uint32_t *s = kmalloc(gfx_w * gfx_h * 4);

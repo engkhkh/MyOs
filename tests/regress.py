@@ -280,6 +280,7 @@ def boot1():
     notes_tests(vm)
     contacts_tests(vm)
     calendar_tests(vm)
+    v27_tests(vm)
 
     # ---- Start menu
     vm.key('meta_l'); time.sleep(0.6); vm.shot('35_start', 'Start menu (Windows key)'); vm.key('esc'); time.sleep(0.3)
@@ -422,7 +423,7 @@ def multi_tests(vm, x, y, w, cols):
     menu_tests(vm, x, y, w, cols)
 
 def rclick(vm, x, y):
-    vm.move(x, y); vm.mon('mouse_button 2'); vm.mon('mouse_button 0'); time.sleep(0.6)
+    vm.move(x, y); time.sleep(0.3); vm.mon('mouse_button 2'); vm.mon('mouse_button 0'); time.sleep(0.6)
 
 def menu_tests(vm, x, y, w, cols):
     """v2.2: right-click menus (Explorer items and empty space, Properties, title bar, desktop, Menu key)"""
@@ -487,6 +488,63 @@ def notes_tests(vm):
     vm.shot('91_notes_delete', 'v2.5 Delete asks first')
     vm.key('ret'); time.sleep(0.8)
     vm.key('alt-f4'); time.sleep(0.5)
+
+def lock_hash(pw):
+    """the lock-screen password hash (FNV-1a over "MyOS lock:" + password), as settings.ini keeps it"""
+    h = 2166136261
+    for ch in ('MyOS lock:' + pw).encode():
+        h = ((h ^ ch) * 16777619) & 0xFFFFFFFF
+    return '%08x' % h
+
+def v27_tests(vm):
+    """v2.7: Start search, screenshots, notifications, calendar reminders, lock screen, Win+E / Win+D"""
+    import datetime
+    focus_terminal(vm)
+    term = front_rect(vm)
+    vm.key('meta_l'); time.sleep(0.6); vm.type('calc', 0.8)
+    vm.shot('100_search_app', 'v2.7 type in Start to search: "calc" finds Calculator')
+    vm.key('ret'); time.sleep(2.5)
+    check('search', 'Enter on a Start search result opens it', front_rect(vm) != term, front_rect(vm))
+    vm.key('alt-f4'); time.sleep(0.5)
+    vm.key('meta_l'); time.sleep(0.6); vm.type('weekend', 0.8)
+    vm.shot('101_search_file', 'v2.7 Start search finds files too: "weekend" -> Weekend plans.txt in C:\\Notes')
+    vm.key('ret'); time.sleep(1.5)
+    vm.shot('101b_search_opened', 'v2.7 Enter opens it (Notepad)')
+    vm.key('alt-f4'); time.sleep(0.6)
+    vm.shot('102_before_print', 'just before Print Screen')
+    vm.key('print'); time.sleep(4)
+    vm.shot('103_print_toast', 'v2.7 Print Screen saves a PNG and says so in a pop-up (bottom right)')
+    focus_terminal(vm)
+    now = datetime.datetime.utcnow()                             # MyOS runs on UTC until "tz +3" later
+    for add in (10, 11):                                         # one of them is 10 minutes away whatever the second
+        t = now + datetime.timedelta(minutes=add)
+        vm.cmd('append /Calendar/Events.txt %s Reminder test' % t.strftime('%Y-%m-%d %H:%M'), 0.3)
+    time.sleep(1.2)
+    vm.shot('104_reminder', 'v2.7 a Calendar reminder pops up 10 minutes before an event (Calendar does not need to be open)')
+    px = vm_pixel(vm, '104_reminder', 872, 692)
+    check('notify', 'a calendar reminder pops up', px == (255, 255, 255), px)
+    vm.click(1024 - 136 + 18, 745); time.sleep(0.8)
+    vm.shot('105_center', 'v2.7 the bell on the taskbar opens the notification centre (reminder, screenshot, Spider win)')
+    vm.key('esc'); time.sleep(0.4)
+    vm.key('meta_l-e'); time.sleep(1.5)
+    vm.shot('106_win_e', 'v2.7 Win+E opens File Explorer')
+    vm.key('meta_l-d'); time.sleep(0.8)
+    vm.shot('107_win_d', 'v2.7 Win+D shows the desktop (all windows minimised)')
+    vm.key('meta_l-d'); time.sleep(0.8)
+    vm.key('alt-f4'); time.sleep(0.5)                           # File Explorer
+    focus_terminal(vm)
+    vm.cmd('password secret', 1)
+    vm.key('meta_l-l'); time.sleep(1.2)
+    vm.shot('108_lock', 'v2.7 Win+L locks the screen (password set with the "password" command)')
+    vm.type('wrong\n', 1)
+    vm.shot('109_lock_wrong', 'v2.7 a wrong password is refused')
+    vm.type('secret\n', 1)
+    vm.shot('110_unlocked', 'v2.7 the right password unlocks; everything is as it was')
+    check('lock', 'the right password unlocks the screen', front_rect(vm) == term, front_rect(vm))
+
+def vm_pixel(vm, shot, x, y):
+    from PIL import Image
+    return Image.open(os.path.join(OUT, shot + '.png')).convert('RGB').getpixel((x, y))
 
 def calendar_tests(vm):
     """v2.6: Calendar"""
@@ -610,6 +668,8 @@ def boot2_disk():
     left = [l for l in mtools('mdir', '-b', '-i', OUT + '/part.img', '::/$Recycle').split() if '/R' in l]
     check('bin', 'Empty Recycle Bin removed everything', not left, left)
     check('desktop', 'Auto arrange icons forgets the saved places', not mexists('/$Desktop.ini'))
+    ini2 = mtype('/settings.ini') or ''
+    check('lock', 'password off removes it', 'password=' not in ini2, ini2)
 
 def disk_checks(stage):
     p = disk_part()
@@ -636,11 +696,32 @@ def boot1_disk():
     check('settings', 'wallpaper picture saved', 'picture=/Pictures/Valley.jpg' in ini, ini.replace('\r\n', ' '))
     check('settings', 'tz and volume saved', 'timezone=3' in ini.replace('+', '') or 'timezone=180' in ini, '')
     check('settings', 'explorer_view saved', 'explorer_view=1' in ini)
+    if True:                                                     # (boot 1)
+        check('lock', 'the password is kept only as a hash', 'password=' + lock_hash('secret') in ini and 'secret' not in ini, ini)
+        shots = [l for l in mtools('mdir', '-b', '-i', OUT + '/part.img', '::/Pictures/Screenshots').splitlines() if l.lower().endswith('.png')]
+        ok = False
+        if shots:
+            from PIL import Image
+            import io, numpy as np
+            subprocess.run(['mcopy', '-n', '-i', OUT + '/part.img', '::/Pictures/Screenshots/' + shots[0].split('/')[-1], OUT + '/shot_from_disk.png'], capture_output=True)
+            try:
+                a = np.array(Image.open(OUT + '/shot_from_disk.png').convert('RGB')).astype(int)
+                b = np.array(Image.open(os.path.join(OUT, '102_before_print.png')).convert('RGB')).astype(int)
+                same = (np.abs(a - b).sum(-1) == 0).mean()
+                ok = a.shape == (768, 1024, 3) and same > 0.97
+            except Exception as e:
+                same = str(e)
+        check('screenshot', 'Print Screen saved a PNG of the screen in C:\\Pictures\\Screenshots', ok, (shots, locals().get('same')))
+
     boot1_bin_checks()
 
 def boot2():
     vm = VM()
     time.sleep(12)
+    vm.shot('44_boot_locked', 'v2.7 with a password set, MyOS starts at the lock screen')
+    check('lock', 'a password means the lock screen at start-up', vm_pixel(vm, '44_boot_locked', 300, 745) != vm_pixel(vm, '36_final', 300, 745), '')
+    vm.type('secret\n', 1.5)
+    vm.cmd('password off', 1)
     vm.shot('45_reboot', 'boot 2: wallpaper (Valley.jpg) and settings kept after a restart')
     vm.cmd('dir', 1); vm.cmd('type reg.txt', 1)
     vm.shot('46_reboot_files', 'boot 2: files are still there', (150, 50, 772, 450))

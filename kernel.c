@@ -52,6 +52,7 @@ static const char keymap_shift[128] = {
     'B','N','M','<','>','?',0,'*',0,' ',0,
 };
 static int shift, caps, ctrl, alt, extended;
+static int win, win_combo;
 int kbd_shift_down(void) { return shift; }
 int kbd_ctrl_down(void) { return ctrl; }
 
@@ -62,9 +63,20 @@ static int decode(uint8_t sc) {
     if (sc == 0x9D) { ctrl = 0; return -1; }
     if (sc == 0x38) { alt = 1; return -1; }                    /* Alt (left or right) */
     if (sc == 0xB8) { alt = 0; return -1; }
+    if (ext && (sc == 0x2A || sc == 0xAA)) return -1;          /* the "fake shift" around Print Screen */
     if (sc == 0x2A || sc == 0x36) { shift = 1; return -1; }
     if (sc == 0xAA || sc == 0xB6) { shift = 0; return -1; }
+    /* The Windows key: alone it opens Start (when let go); held with L / E / D it is a shortcut */
+    if (ext && (sc == 0x5B || sc == 0x5C)) { win = 1; win_combo = 0; return -1; }
+    if (ext && (sc == 0xDB || sc == 0xDC)) { win = 0; return win_combo ? -1 : KEY_START; }
     if (sc & 0x80) return -1;                                  /* key released */
+    if (win) {
+        win_combo = 1;
+        if (sc == 0x26) return KEY_LOCK;                       /* Win+L: lock */
+        if (sc == 0x12) return KEY_WIN_E;                      /* Win+E: File Explorer */
+        if (sc == 0x20) return KEY_WIN_D;                      /* Win+D: show the desktop */
+        return -1;
+    }
     if (alt && sc == 0x3E) return KEY_ALTF4;                    /* Alt+F4: close the window */
     if (alt && sc == 0x0F) return KEY_ALTTAB;                   /* Alt+Tab: switch windows */
     if (alt && sc == 0x1C) return KEY_ALTENTER;                 /* Alt+Enter: Properties */
@@ -74,7 +86,7 @@ static int decode(uint8_t sc) {
         if (sc == 0x4B) return KEY_LEFT;
         if (sc == 0x4D) return KEY_RIGHT;
         if (sc == 0x53) return KEY_DEL;
-        if (sc == 0x5B || sc == 0x5C) return KEY_START;       /* Windows/Super key */
+        if (sc == 0x37) return KEY_PRTSC;                      /* Print Screen */
         if (sc == 0x5D) return KEY_MENU;                       /* the Menu key */
         if (sc == 0x1C) return '\n';                           /* keypad Enter */
         if (sc == 0x49) return KEY_PGUP;
